@@ -2,6 +2,7 @@
  * Cell Diagrams Renderer Types
  *
  * Type definitions for the diagram renderer.
+ * Updated for Cell-Based Architecture DSL.
  */
 
 import type { Node, Edge } from '@xyflow/react';
@@ -9,21 +10,23 @@ import type {
   ComponentType,
   CellType,
   EndpointType,
-  Attribute,
+  ConnectionDirection,
+  ExternalType,
+  UserType,
+  AttributeValue,
 } from '@cell-diagrams/core';
 
 // ============================================
 // Node Data Types
 // ============================================
 
-/** Data for a Cell node */
-export interface CellNodeData extends Record<string, unknown> {
-  type: 'cell';
+/** Gateway data for cell boundary */
+export interface GatewayNodeData {
   id: string;
-  label: string;
-  cellType?: CellType;
-  components: ComponentNodeData[];
-  endpoints: EndpointNodeData[];
+  exposes: EndpointType[];
+  policies?: string[] | undefined;
+  hasAuth?: boolean | undefined;
+  authType?: 'local-sts' | 'federated' | undefined;
 }
 
 /** Data for a component within a cell */
@@ -31,14 +34,28 @@ export interface ComponentNodeData {
   id: string;
   label: string;
   componentType: ComponentType;
-  attributes: Attribute[];
+  attributes: Record<string, AttributeValue>;
+  sidecars?: string[] | undefined;
 }
 
-/** Data for an endpoint within a cell */
-export interface EndpointNodeData {
-  endpointType: EndpointType;
-  componentRef: string;
-  attributes: Attribute[];
+/** Data for a cluster within a cell */
+export interface ClusterNodeData {
+  id: string;
+  clusterType?: string | undefined;
+  replicas?: number | undefined;
+  components: ComponentNodeData[];
+}
+
+/** Data for a Cell node */
+export interface CellNodeData extends Record<string, unknown> {
+  type: 'cell';
+  id: string;
+  label: string;
+  cellType: CellType;
+  gateway?: GatewayNodeData | undefined;
+  components: ComponentNodeData[];
+  clusters: ClusterNodeData[];
+  internalConnections: Array<{ source: string; target: string }>;
 }
 
 /** Data for an External system node */
@@ -46,7 +63,8 @@ export interface ExternalNodeData extends Record<string, unknown> {
   type: 'external';
   id: string;
   label: string;
-  externalType?: string;
+  externalType: ExternalType;
+  provides?: EndpointType[] | undefined;
 }
 
 /** Data for a User/Actor node */
@@ -54,11 +72,26 @@ export interface UserNodeData extends Record<string, unknown> {
   type: 'user';
   id: string;
   label: string;
-  attributes: Attribute[];
+  userType: UserType;
+  channels?: string[] | undefined;
+}
+
+/** Data for an Application container node */
+export interface ApplicationNodeData extends Record<string, unknown> {
+  type: 'application';
+  id: string;
+  label: string;
+  version?: string | undefined;
+  cells: string[];
+  gateway?: GatewayNodeData | undefined;
 }
 
 /** Union of all node data types */
-export type DiagramNodeData = CellNodeData | ExternalNodeData | UserNodeData;
+export type DiagramNodeData =
+  | CellNodeData
+  | ExternalNodeData
+  | UserNodeData
+  | ApplicationNodeData;
 
 // ============================================
 // Edge Data Types
@@ -66,9 +99,11 @@ export type DiagramNodeData = CellNodeData | ExternalNodeData | UserNodeData;
 
 /** Data for a connection edge */
 export interface ConnectionEdgeData extends Record<string, unknown> {
-  label?: string;
-  via?: string;
-  attributes: Attribute[];
+  direction?: ConnectionDirection | undefined;
+  label?: string | undefined;
+  via?: string | undefined;
+  protocol?: string | undefined;
+  attributes: Record<string, AttributeValue>;
 }
 
 // ============================================
@@ -78,8 +113,9 @@ export interface ConnectionEdgeData extends Record<string, unknown> {
 export type CellNode = Node<CellNodeData, 'cell'>;
 export type ExternalNode = Node<ExternalNodeData, 'external'>;
 export type UserNode = Node<UserNodeData, 'user'>;
+export type ApplicationNode = Node<ApplicationNodeData, 'application'>;
 
-export type DiagramNode = CellNode | ExternalNode | UserNode;
+export type DiagramNode = CellNode | ExternalNode | UserNode | ApplicationNode;
 export type DiagramEdge = Edge<ConnectionEdgeData>;
 
 // ============================================
@@ -140,21 +176,45 @@ export const COMPONENT_ICONS: Record<ComponentType, string> = {
   microservice: '⚙️',
   function: 'λ',
   database: '🗄️',
-  gateway: '🚪',
-  service: '📦',
   broker: '📨',
   cache: '⚡',
-  legacy: '🏛️',
-  esb: '🔀',
+  gateway: '🚪',
   idp: '🔐',
+  sts: '🎫',
+  userstore: '👥',
+  esb: '🔀',
+  adapter: '🔌',
+  transformer: '🔄',
+  webapp: '🌐',
+  mobile: '📱',
+  iot: '📡',
+  legacy: '🏛️',
 };
 
 export const CELL_TYPE_COLORS: Record<CellType, string> = {
   logic: '#4f46e5',      // Indigo
   integration: '#0891b2', // Cyan
-  legacy: '#78716c',     // Stone
   data: '#059669',       // Emerald
   security: '#dc2626',   // Red
   channel: '#7c3aed',    // Violet
-  external: '#6b7280',   // Gray
+  legacy: '#78716c',     // Stone
+};
+
+export const DIRECTION_COLORS: Record<ConnectionDirection, string> = {
+  northbound: '#22c55e',  // Green
+  southbound: '#3b82f6',  // Blue
+  eastbound: '#f59e0b',   // Amber
+  westbound: '#8b5cf6',   // Purple
+};
+
+export const EXTERNAL_TYPE_ICONS: Record<ExternalType, string> = {
+  saas: '☁️',
+  partner: '🤝',
+  enterprise: '🏢',
+};
+
+export const USER_TYPE_ICONS: Record<UserType, string> = {
+  external: '👤',
+  internal: '🏢',
+  system: '🤖',
 };

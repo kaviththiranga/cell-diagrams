@@ -1,38 +1,39 @@
 /**
  * UserNode Component
  *
- * Renders a user/actor in the diagram.
+ * Renders a user/actor (external customer, internal employee, system)
  */
 
 import { memo } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import type { UserNode as UserNodeType, UserNodeData } from '../types';
+import { USER_TYPE_ICONS } from '../types';
 
 function UserNodeComponent({ data, selected }: NodeProps<UserNodeType>) {
   const userData = data as UserNodeData;
-  // Check if user is internal or external based on attributes
-  const typeAttr = userData.attributes.find((a) => a.key === 'type');
-  const isInternal = typeAttr?.value === 'internal';
+  const icon = USER_TYPE_ICONS[userData.userType] ?? '👤';
 
   return (
-    <div className={`user-node ${selected ? 'selected' : ''} ${isInternal ? 'internal' : 'external'}`}>
+    <div className={`user-node user-${userData.userType} ${selected ? 'selected' : ''}`}>
       {/* User Icon */}
-      <div className="user-node-icon">
-        <svg
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-          <circle cx="12" cy="7" r="4" />
-        </svg>
-      </div>
+      <div className="user-node-icon">{icon}</div>
 
       {/* Label */}
       <div className="user-node-label">{userData.label}</div>
+
+      {/* Type badge */}
+      <div className="user-node-type">{userData.userType}</div>
+
+      {/* Channels */}
+      {userData.channels && userData.channels.length > 0 && (
+        <div className="user-node-channels">
+          {userData.channels.map((channel, idx) => (
+            <span key={idx} className="channel-badge">
+              {channel}
+            </span>
+          ))}
+        </div>
+      )}
 
       {/* Output Handle (users typically connect TO cells) */}
       <Handle type="source" position={Position.Bottom} className="user-handle" />

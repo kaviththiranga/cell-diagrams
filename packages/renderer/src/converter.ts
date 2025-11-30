@@ -2,6 +2,7 @@
  * AST to Diagram Converter
  *
  * Converts a Cell Diagrams AST into React Flow nodes and edges.
+ * Updated for Cell-Based Architecture DSL.
  */
 
 import type { MarkerType } from '@xyflow/react';
@@ -10,7 +11,11 @@ import type {
   CellDefinition,
   ExternalDefinition,
   UserDefinition,
+  ApplicationDefinition,
+  ConnectionsBlock,
   Connection,
+  ComponentDefinition,
+  ClusterDefinition,
 } from '@cell-diagrams/core';
 import type {
   DiagramNode,
@@ -19,8 +24,10 @@ import type {
   CellNodeData,
   ExternalNodeData,
   UserNodeData,
+  ApplicationNodeData,
   ComponentNodeData,
-  EndpointNodeData,
+  ClusterNodeData,
+  GatewayNodeData,
   ConnectionEdgeData,
   LayoutOptions,
 } from './types';
@@ -40,14 +47,22 @@ export function astToDiagram(ast: Program): DiagramState {
 
   // Process all statements
   for (const stmt of ast.statements) {
-    if (stmt.type === 'CellDefinition') {
-      nodes.push(cellToNode(stmt));
-    } else if (stmt.type === 'ExternalDefinition') {
-      nodes.push(externalToNode(stmt));
-    } else if (stmt.type === 'UserDefinition') {
-      nodes.push(userToNode(stmt));
-    } else if (stmt.type === 'Connection') {
-      edges.push(connectionToEdge(stmt));
+    switch (stmt.type) {
+      case 'CellDefinition':
+        nodes.push(cellToNode(stmt));
+        break;
+      case 'ExternalDefinition':
+        nodes.push(externalToNode(stmt));
+        break;
+      case 'UserDefinition':
+        nodes.push(userToNode(stmt));
+        break;
+      case 'ApplicationDefinition':
+        nodes.push(applicationToNode(stmt));
+        break;
+      case 'ConnectionsBlock':
+        edges.push(...connectionsBlockToEdges(stmt));
+        break;
     }
   }
 
@@ -58,26 +73,44 @@ export function astToDiagram(ast: Program): DiagramState {
  * Convert a CellDefinition to a React Flow node.
  */
 function cellToNode(cell: CellDefinition): DiagramNode {
-  const components: ComponentNodeData[] = cell.components.map((comp) => ({
-    id: comp.id,
-    label: comp.id,
-    componentType: comp.componentType,
-    attributes: comp.attributes,
-  }));
+  const components: ComponentNodeData[] = [];
+  const clusters: ClusterNodeData[] = [];
 
-  const endpoints: EndpointNodeData[] = cell.exposedEndpoints.map((ep) => ({
-    endpointType: ep.endpointType,
-    componentRef: ep.componentRef,
-    attributes: ep.attributes,
+  for (const item of cell.components) {
+    if (item.type === 'ClusterDefinition') {
+      clusters.push(clusterToNodeData(item));
+    } else {
+      components.push(componentToNodeData(item));
+    }
+  }
+
+  // Convert gateway if present
+  let gateway: GatewayNodeData | undefined;
+  if (cell.gateway) {
+    gateway = {
+      id: cell.gateway.id,
+      exposes: cell.gateway.exposes,
+      policies: cell.gateway.policies,
+      hasAuth: !!cell.gateway.auth,
+      authType: cell.gateway.auth?.authType,
+    };
+  }
+
+  // Convert internal connections
+  const internalConnections = cell.connections.map((conn) => ({
+    source: conn.source,
+    target: conn.target,
   }));
 
   const data: CellNodeData = {
     type: 'cell',
     id: cell.id,
-    label: cell.name ?? cell.id,
-    ...(cell.cellType !== undefined && { cellType: cell.cellType }),
+    label: cell.label ?? cell.id,
+    cellType: cell.cellType,
+    gateway,
     components,
-    endpoints,
+    clusters,
+    internalConnections,
   };
 
   return {
@@ -89,14 +122,40 @@ function cellToNode(cell: CellDefinition): DiagramNode {
 }
 
 /**
+ * Convert a ComponentDefinition to ComponentNodeData.
+ */
+function componentToNodeData(comp: ComponentDefinition): ComponentNodeData {
+  return {
+    id: comp.id,
+    label: comp.id,
+    componentType: comp.componentType,
+    attributes: comp.attributes,
+    sidecars: comp.sidecars,
+  };
+}
+
+/**
+ * Convert a ClusterDefinition to ClusterNodeData.
+ */
+function clusterToNodeData(cluster: ClusterDefinition): ClusterNodeData {
+  return {
+    id: cluster.id,
+    clusterType: cluster.clusterType,
+    replicas: cluster.replicas,
+    components: cluster.components.map(componentToNodeData),
+  };
+}
+
+/**
  * Convert an ExternalDefinition to a React Flow node.
  */
 function externalToNode(external: ExternalDefinition): DiagramNode {
   const data: ExternalNodeData = {
     type: 'external',
     id: external.id,
-    label: external.name ?? external.id,
-    ...(external.externalType !== undefined && { externalType: external.externalType }),
+    label: external.label ?? external.id,
+    externalType: external.externalType,
+    provides: external.provides,
   };
 
   return {
@@ -114,8 +173,9 @@ function userToNode(user: UserDefinition): DiagramNode {
   const data: UserNodeData = {
     type: 'user',
     id: user.id,
-    label: user.id,
-    attributes: user.attributes,
+    label: user.label ?? user.id,
+    userType: user.userType,
+    channels: user.channels,
   };
 
   return {
@@ -127,25 +187,75 @@ function userToNode(user: UserDefinition): DiagramNode {
 }
 
 /**
- * Convert a Connection to a React Flow edge.
+ * Convert an ApplicationDefinition to a React Flow node.
  */
-function connectionToEdge(conn: Connection): DiagramEdge {
-  const labelAttr = conn.attributes.find((a) => a.key === 'label');
-  const viaAttr = conn.attributes.find((a) => a.key === 'via');
+function applicationToNode(app: ApplicationDefinition): DiagramNode {
+  let gateway: GatewayNodeData | undefined;
+  if (app.gateway) {
+    gateway = {
+      id: app.gateway.id,
+      exposes: app.gateway.exposes,
+      policies: app.gateway.policies,
+      hasAuth: !!app.gateway.auth,
+      authType: app.gateway.auth?.authType,
+    };
+  }
 
-  const label = typeof labelAttr?.value === 'string' ? labelAttr.value : undefined;
-  const via = typeof viaAttr?.value === 'string' ? viaAttr.value : undefined;
-
-  const data: ConnectionEdgeData = {
-    ...(label !== undefined && { label }),
-    ...(via !== undefined && { via }),
-    attributes: conn.attributes,
+  const data: ApplicationNodeData = {
+    type: 'application',
+    id: app.id,
+    label: app.label ?? app.id,
+    version: app.version,
+    cells: app.cells,
+    gateway,
   };
 
   return {
-    id: `${conn.source}-${conn.target}`,
-    source: conn.source,
-    target: conn.target,
+    id: app.id,
+    type: 'application',
+    position: { x: 0, y: 0 },
+    data,
+  };
+}
+
+/**
+ * Convert a ConnectionsBlock to React Flow edges.
+ */
+function connectionsBlockToEdges(block: ConnectionsBlock): DiagramEdge[] {
+  return block.connections.map(connectionToEdge);
+}
+
+/**
+ * Convert a Connection to a React Flow edge.
+ */
+function connectionToEdge(conn: Connection): DiagramEdge {
+  // Extract common attributes
+  const label = conn.attributes['label'];
+  const via = conn.attributes['via'];
+  const protocol = conn.attributes['protocol'];
+
+  const data: ConnectionEdgeData = {
+    direction: conn.direction,
+    label: typeof label === 'string' ? label : undefined,
+    via: typeof via === 'string' ? via : undefined,
+    protocol: typeof protocol === 'string' ? protocol : undefined,
+    attributes: conn.attributes,
+  };
+
+  // Build source/target IDs with optional component references
+  const sourceId = conn.source.component
+    ? `${conn.source.entity}.${conn.source.component}`
+    : conn.source.entity;
+  const targetId = conn.target.component
+    ? `${conn.target.entity}.${conn.target.component}`
+    : conn.target.entity;
+
+  return {
+    id: `${sourceId}-${targetId}`,
+    source: conn.source.entity,
+    target: conn.target.entity,
+    sourceHandle: conn.source.component ?? null,
+    targetHandle: conn.target.component ?? null,
     type: 'connection',
     data,
     markerEnd: {
@@ -220,18 +330,24 @@ function getNodeDimensions(node: DiagramNode): { width: number; height: number }
   switch (node.type) {
     case 'cell': {
       const cellData = node.data as CellNodeData;
-      const baseHeight = 60; // Header
+      const baseHeight = 80; // Header + gateway area
       const componentHeight = cellData.components.length * 32;
-      const endpointHeight = cellData.endpoints.length > 0 ? 40 : 0;
+      const clusterHeight = cellData.clusters.reduce(
+        (sum, c) => sum + 48 + c.components.length * 28,
+        0
+      );
+      const hasGateway = cellData.gateway ? 40 : 0;
       return {
-        width: 280,
-        height: Math.max(120, baseHeight + componentHeight + endpointHeight),
+        width: 320,
+        height: Math.max(160, baseHeight + hasGateway + componentHeight + clusterHeight),
       };
     }
     case 'external':
-      return { width: 120, height: 100 };
+      return { width: 140, height: 100 };
     case 'user':
-      return { width: 100, height: 80 };
+      return { width: 120, height: 90 };
+    case 'application':
+      return { width: 400, height: 200 };
     default:
       return { width: 150, height: 50 };
   }

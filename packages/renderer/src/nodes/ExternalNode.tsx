@@ -1,42 +1,41 @@
 /**
  * ExternalNode Component
  *
- * Renders an external system (SaaS, partner API, etc.)
+ * Renders an external system (SaaS, partner API, enterprise system)
  */
 
 import { memo } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import type { ExternalNode as ExternalNodeType, ExternalNodeData } from '../types';
+import { EXTERNAL_TYPE_ICONS } from '../types';
 
 function ExternalNodeComponent({ data, selected }: NodeProps<ExternalNodeType>) {
   const extData = data as ExternalNodeData;
+  const icon = EXTERNAL_TYPE_ICONS[extData.externalType] ?? '🌐';
+
   return (
-    <div className={`external-node ${selected ? 'selected' : ''}`}>
+    <div className={`external-node external-${extData.externalType} ${selected ? 'selected' : ''}`}>
       {/* Input Handle */}
       <Handle type="target" position={Position.Top} className="external-handle" />
 
       {/* Icon */}
-      <div className="external-node-icon">
-        <svg
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <circle cx="12" cy="12" r="10" />
-          <line x1="2" y1="12" x2="22" y2="12" />
-          <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-        </svg>
-      </div>
+      <div className="external-node-icon">{icon}</div>
 
       {/* Label */}
       <div className="external-node-label">{extData.label}</div>
 
       {/* Type badge */}
-      {extData.externalType && (
-        <div className="external-node-type">{extData.externalType}</div>
+      <div className="external-node-type">{extData.externalType}</div>
+
+      {/* Provides endpoints */}
+      {extData.provides && extData.provides.length > 0 && (
+        <div className="external-node-provides">
+          {extData.provides.map((ep, idx) => (
+            <span key={idx} className={`provides-badge provides-${ep}`}>
+              {ep}
+            </span>
+          ))}
+        </div>
       )}
 
       {/* Output Handle */}

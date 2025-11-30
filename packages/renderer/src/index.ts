@@ -12,7 +12,7 @@ export { useCellDiagram } from './hooks';
 export type { UseCellDiagramOptions, UseCellDiagramResult } from './hooks';
 
 // Custom nodes
-export { CellNode, ExternalNode, UserNode, nodeTypes } from './nodes';
+export { CellNode, ExternalNode, UserNode, ApplicationNode, nodeTypes } from './nodes';
 
 // Custom edges
 export { ConnectionEdge, edgeTypes } from './edges';
@@ -25,8 +25,10 @@ export type {
   CellNodeData,
   ExternalNodeData,
   UserNodeData,
+  ApplicationNodeData,
   ComponentNodeData,
-  EndpointNodeData,
+  ClusterNodeData,
+  GatewayNodeData,
   DiagramNodeData,
   ConnectionEdgeData,
   DiagramNode,
@@ -40,6 +42,9 @@ export {
   defaultLayoutOptions,
   COMPONENT_ICONS,
   CELL_TYPE_COLORS,
+  DIRECTION_COLORS,
+  EXTERNAL_TYPE_ICONS,
+  USER_TYPE_ICONS,
 } from './types';
 
 // Re-export useful React Flow types

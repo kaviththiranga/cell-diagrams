@@ -1,5 +1,11 @@
 /**
  * Monaco Editor Language Configuration for Cell Diagrams DSL
+ *
+ * Updated for Cell-Based Architecture DSL with support for:
+ * - Cells with gateway, components, clusters
+ * - Virtual applications
+ * - External systems and users
+ * - Connection directions (N/S/E/W)
  */
 
 import type * as Monaco from 'monaco-editor';
@@ -17,15 +23,18 @@ export const languageConfiguration: Monaco.languages.LanguageConfiguration = {
   brackets: [
     ['{', '}'],
     ['[', ']'],
+    ['(', ')'],
   ],
   autoClosingPairs: [
     { open: '{', close: '}' },
     { open: '[', close: ']' },
+    { open: '(', close: ')' },
     { open: '"', close: '"', notIn: ['string'] },
   ],
   surroundingPairs: [
     { open: '{', close: '}' },
     { open: '[', close: ']' },
+    { open: '(', close: ')' },
     { open: '"', close: '"' },
   ],
   folding: {
@@ -42,13 +51,46 @@ export const languageConfiguration: Monaco.languages.LanguageConfiguration = {
 export const monarchTokensProvider: Monaco.languages.IMonarchLanguage = {
   defaultToken: 'invalid',
 
-  keywords: ['cell', 'external', 'user', 'connect', 'components', 'expose', 'name', 'type', 'via', 'label'],
+  // Top-level keywords
+  topLevelKeywords: ['diagram', 'cell', 'external', 'user', 'application', 'connections'],
 
-  componentTypes: ['ms', 'fn', 'db', 'gw', 'svc', 'broker', 'cache', 'legacy', 'esb', 'idp'],
+  // Cell/Gateway property keywords
+  propertyKeywords: [
+    'label', 'type', 'gateway', 'components', 'cluster',
+    'exposes', 'policies', 'auth', 'federated', 'local-sts',
+    'provides', 'channels', 'version', 'cells', 'routes',
+  ],
 
-  cellTypes: ['logic', 'integration', 'data', 'security', 'channel'],
+  // Attribute keywords
+  attributeKeywords: [
+    'tech', 'replicas', 'role', 'sidecar', 'provider', 'protocol', 'via',
+  ],
 
-  endpointTypes: ['api', 'event', 'stream'],
+  // Cell types
+  cellTypes: ['logic', 'integration', 'data', 'security', 'channel', 'legacy'],
+
+  // Component types (full and short)
+  componentTypes: [
+    'microservice', 'function', 'database', 'broker', 'cache', 'gateway',
+    'idp', 'sts', 'userstore',
+    'esb', 'adapter', 'transformer',
+    'webapp', 'mobile', 'iot',
+    'legacy',
+    // Short forms
+    'ms', 'fn', 'db',
+  ],
+
+  // Connection direction keywords
+  directions: ['northbound', 'southbound', 'eastbound', 'westbound'],
+
+  // Endpoint types
+  endpointTypes: ['api', 'events', 'stream'],
+
+  // External system types
+  externalTypes: ['saas', 'partner', 'enterprise'],
+
+  // User types
+  userTypes: ['external', 'internal', 'system'],
 
   operators: ['->'],
 
@@ -62,23 +104,50 @@ export const monarchTokensProvider: Monaco.languages.IMonarchLanguage = {
       [/\/\/.*$/, 'comment'],
       [/\/\*/, 'comment', '@comment'],
 
-      // Keywords
+      // Top-level keywords
       [
-        /\b(cell|external|user|connect|components|expose)\b/,
+        /\b(diagram|cell|external|user|application|connections)\b/,
         'keyword',
       ],
 
-      // Properties
-      [/\b(name|type|via|label)\b/, 'keyword.property'],
+      // Property keywords
+      [
+        /\b(label|type|gateway|components|cluster|exposes|policies|auth|federated|provides|channels|version|cells|routes)\b/,
+        'keyword.property',
+      ],
 
-      // Component types
-      [/\b(ms|fn|db|gw|svc|broker|cache|legacy|esb|idp)\b/, 'type.component'],
+      // local-sts (special case with hyphen)
+      [/\blocal-sts\b/, 'keyword.property'],
+
+      // Attribute keywords
+      [/\b(tech|replicas|role|sidecar|provider|protocol|via)\b/, 'keyword.attribute'],
 
       // Cell types
       [/\b(logic|integration|data|security|channel)\b/, 'type.cell'],
 
+      // Component types (full names)
+      [
+        /\b(microservice|function|database|broker|cache|gateway|idp|sts|userstore|esb|adapter|transformer|webapp|mobile|iot)\b/,
+        'type.component',
+      ],
+
+      // Component types (short forms)
+      [/\b(ms|fn|db)\b/, 'type.component.short'],
+
+      // Connection directions
+      [/\b(northbound|southbound|eastbound|westbound)\b/, 'type.direction'],
+
       // Endpoint types
-      [/\b(api|event|stream)\b/, 'type.endpoint'],
+      [/\b(api|events|stream)\b/, 'type.endpoint'],
+
+      // External system types
+      [/\b(saas|partner|enterprise)\b/, 'type.external'],
+
+      // User types
+      [/\b(internal|system)\b/, 'type.user'],
+
+      // legacy - can be cell type or component type
+      [/\blegacy\b/, 'type.legacy'],
 
       // Boolean literals
       [/\b(true|false)\b/, 'keyword.boolean'],
@@ -99,8 +168,10 @@ export const monarchTokensProvider: Monaco.languages.IMonarchLanguage = {
       // Delimiters
       [/[{}]/, 'delimiter.bracket'],
       [/[\[\]]/, 'delimiter.square'],
+      [/[()]/, 'delimiter.paren'],
       [/:/, 'delimiter.colon'],
       [/,/, 'delimiter.comma'],
+      [/\./, 'delimiter.dot'],
 
       // Whitespace
       [/\s+/, 'white'],
@@ -125,18 +196,29 @@ export const monarchTokensProvider: Monaco.languages.IMonarchLanguage = {
  * Theme colors for Cell Diagrams
  */
 export const themeRules: Monaco.editor.ITokenThemeRule[] = [
-  { token: 'keyword', foreground: 'c586c0' },
+  // Keywords
+  { token: 'keyword', foreground: 'c586c0', fontStyle: 'bold' },
   { token: 'keyword.property', foreground: '9cdcfe' },
+  { token: 'keyword.attribute', foreground: '9cdcfe', fontStyle: 'italic' },
   { token: 'keyword.boolean', foreground: '569cd6' },
+
+  // Types
+  { token: 'type.cell', foreground: 'dcdcaa', fontStyle: 'bold' },
   { token: 'type.component', foreground: '4ec9b0' },
-  { token: 'type.cell', foreground: 'dcdcaa' },
+  { token: 'type.component.short', foreground: '4ec9b0', fontStyle: 'italic' },
+  { token: 'type.direction', foreground: 'ce9178', fontStyle: 'bold' },
   { token: 'type.endpoint', foreground: 'ce9178' },
+  { token: 'type.external', foreground: '6a9955' },
+  { token: 'type.user', foreground: '569cd6' },
+  { token: 'type.legacy', foreground: 'd7ba7d' },
+
+  // Other tokens
   { token: 'identifier', foreground: '9cdcfe' },
   { token: 'number', foreground: 'b5cea8' },
   { token: 'string', foreground: 'ce9178' },
   { token: 'string.escape', foreground: 'd7ba7d' },
-  { token: 'comment', foreground: '6a9955' },
-  { token: 'operator.arrow', foreground: 'd4d4d4' },
+  { token: 'comment', foreground: '6a9955', fontStyle: 'italic' },
+  { token: 'operator.arrow', foreground: 'd4d4d4', fontStyle: 'bold' },
   { token: 'delimiter', foreground: 'd4d4d4' },
 ];
 
@@ -168,66 +250,109 @@ export function registerCellDiagramsLanguage(monaco: typeof Monaco): void {
 }
 
 /**
- * Default Cell Diagrams sample code
+ * Default Cell Diagrams sample code (Cell-Based Architecture)
  */
-export const defaultSampleCode = `// E-Commerce Cell Architecture Example
+export const defaultSampleCode = `// E-Commerce Cell-Based Architecture Example
+// Based on WSO2 Cell-Based Architecture Reference
 
-cell OrderCell {
-  name: "Order Management"
-  type: logic
+diagram ECommerce {
 
-  components {
-    ms OrderService
-    ms CartService
-    fn OrderValidator
-    db OrderDB [tech: "PostgreSQL"]
-    gw OrderGateway
-    broker OrderEvents [tech: "Kafka"]
+  // Order Management Cell (Logic Cell)
+  cell OrderCell {
+    label: "Order Management"
+    type: logic
+
+    gateway {
+      exposes: [api, events]
+      policies: ["rate-limit", "circuit-breaker"]
+      auth: local-sts
+    }
+
+    components {
+      microservice OrderService [tech: "Node.js", replicas: 3]
+      microservice CartService [tech: "Node.js"]
+      function OrderValidator [tech: "Lambda"]
+      database OrderDB [tech: "PostgreSQL"]
+      broker OrderEvents [tech: "Kafka"]
+    }
+
+    cluster Processing {
+      microservice PaymentProcessor
+      microservice FulfillmentService
+    }
   }
 
-  connect {
-    OrderGateway -> OrderService
-    OrderService -> OrderDB
-    OrderService -> CartService
-    OrderValidator -> OrderService
-    OrderService -> OrderEvents
+  // Customer Data Cell (Data Cell)
+  cell CustomerCell {
+    label: "Customer Management"
+    type: data
+
+    gateway {
+      exposes: [api]
+      auth: federated
+    }
+
+    components {
+      microservice CustomerService [tech: "Go"]
+      database CustomerDB [tech: "MongoDB"]
+      cache CustomerCache [tech: "Redis"]
+    }
   }
 
-  expose {
-    api: OrderGateway [path: "/api/orders"]
-    event: OrderEvents [topic: "orders.*"]
+  // Security Cell
+  cell SecurityCell {
+    label: "Identity & Access"
+    type: security
+
+    gateway {
+      exposes: [api]
+    }
+
+    components {
+      idp IdentityProvider [tech: "Keycloak"]
+      sts TokenService
+      userstore UserDirectory [tech: "LDAP"]
+    }
   }
+
+  // External Systems
+  external Stripe {
+    label: "Payment Gateway"
+    type: saas
+    provides: [api]
+  }
+
+  external ShippingPartner {
+    label: "Logistics Provider"
+    type: partner
+    provides: [api, events]
+  }
+
+  // Users / Actors
+  user Customer {
+    type: external
+    channels: [web, mobile]
+  }
+
+  user Admin {
+    type: internal
+    channels: [web]
+  }
+
+  // Inter-cell connections
+  connections {
+    // Northbound (external to cell)
+    Customer -> OrderCell [northbound, via: "gateway"]
+    Admin -> OrderCell [northbound, via: "gateway"]
+
+    // Eastbound (cell to cell)
+    OrderCell -> CustomerCell [eastbound, protocol: "gRPC"]
+    OrderCell -> SecurityCell [eastbound]
+
+    // Southbound (cell to external)
+    OrderCell -> Stripe [southbound, via: "PaymentProcessor"]
+    OrderCell -> ShippingPartner [southbound]
+  }
+
 }
-
-cell CustomerCell {
-  name: "Customer Management"
-  type: logic
-
-  components {
-    ms CustomerService
-    db CustomerDB
-    gw CustomerGateway
-  }
-
-  connect {
-    CustomerGateway -> CustomerService
-    CustomerService -> CustomerDB
-  }
-
-  expose {
-    api: CustomerGateway
-  }
-}
-
-external Stripe {
-  name: "Stripe Payment"
-  type: saas
-}
-
-user Customer [type: external, channel: web]
-user Admin [type: internal]
-
-connect OrderCell -> CustomerCell [via: CustomerGateway, label: "Get Customer"]
-connect OrderCell -> Stripe [label: "Process Payment"]
-connect Customer -> OrderCell [via: OrderGateway]
 `;
