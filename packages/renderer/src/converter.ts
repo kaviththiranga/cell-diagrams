@@ -1124,3 +1124,172 @@ export function findConnectedEdges(
 ): DiagramEdge[] {
   return edges.filter((e) => e.source === nodeId || e.target === nodeId);
 }
+
+// ============================================
+// New Layout Engine Integration
+// ============================================
+
+import {
+  LayoutEngine,
+  type LayoutEngineOptions,
+  type DiagramLayoutData,
+  type CellLayoutData,
+  type ExternalLayoutData,
+  type LayoutEdge,
+  type LayoutNode,
+} from './layout';
+
+/**
+ * Convert DiagramState to LayoutEngine format
+ */
+function toLayoutData(state: DiagramState): DiagramLayoutData {
+  const cells: CellLayoutData[] = [];
+  const externals: ExternalLayoutData[] = [];
+  const interCellConnections: LayoutEdge[] = [];
+  const connections: LayoutEdge[] = [];
+
+  // Build cell ID set for categorization
+  const cellIds = new Set(
+    state.nodes.filter((n) => n.type === 'cell').map((n) => n.id)
+  );
+
+  // Convert cells
+  for (const node of state.nodes) {
+    if (node.type === 'cell') {
+      const cellData = node.data as CellNodeData;
+      const components: LayoutNode[] = cellData.components.map((c) => ({
+        id: c.id,
+        width: 50,
+        height: 50,
+        data: c,
+      }));
+
+      const internalConnections: LayoutEdge[] = cellData.internalConnections.map(
+        (conn, idx) => ({
+          id: `${node.id}-internal-${idx}`,
+          source: conn.source,
+          target: conn.target,
+        })
+      );
+
+      cells.push({
+        id: node.id,
+        components,
+        internalConnections,
+        gateway: cellData.gateway
+          ? {
+              id: cellData.gateway.id,
+              position: 'top' as const, // Default to top
+            }
+          : undefined,
+      });
+    }
+  }
+
+  // Convert externals and users
+  for (const node of state.nodes) {
+    if (node.type === 'external' || node.type === 'user') {
+      const size = getNodeSize(node);
+      externals.push({
+        id: node.id,
+        width: size.width,
+        height: size.height,
+        type: node.type as 'external' | 'user',
+        data: node.data,
+      });
+    }
+  }
+
+  // Categorize edges
+  for (const edge of state.edges) {
+    const sourceParts = edge.source.split('.');
+    const targetParts = edge.target.split('.');
+    const sourceBaseId = sourceParts[0] ?? edge.source;
+    const targetBaseId = targetParts[0] ?? edge.target;
+    const sourceIsCell = cellIds.has(sourceBaseId);
+    const targetIsCell = cellIds.has(targetBaseId);
+
+    const layoutEdge: LayoutEdge = {
+      id: edge.id,
+      source: edge.source,
+      target: edge.target,
+      data: edge.data,
+    };
+
+    if (sourceIsCell && targetIsCell && sourceBaseId !== targetBaseId) {
+      // Inter-cell connection
+      interCellConnections.push({
+        ...layoutEdge,
+        source: sourceBaseId,
+        target: targetBaseId,
+      });
+    }
+
+    // All connections
+    connections.push(layoutEdge);
+  }
+
+  return {
+    cells,
+    externals,
+    interCellConnections,
+    connections,
+  };
+}
+
+/**
+ * Apply layout using the new LayoutEngine.
+ * This provides enhanced auto-positioning with:
+ * - Two-graph strategy for linked/unlinked nodes
+ * - Dynamic cell sizing
+ * - Grid fallback for overlaps
+ * - Boundary positioning for externals
+ * - Bezier edge routing
+ */
+export function applyLayoutWithEngine(
+  state: DiagramState,
+  options: Partial<LayoutEngineOptions> = {}
+): DiagramState {
+  const engine = new LayoutEngine(options);
+  const layoutData = toLayoutData(state);
+  const result = engine.layout(layoutData);
+
+  // Apply positions to nodes
+  const layoutedNodes: DiagramNode[] = state.nodes.map((node) => {
+    const position = result.nodes.get(node.id);
+    if (position) {
+      // Update cell dimensions if applicable
+      if (node.type === 'cell') {
+        const cellDims = result.cellDimensions.get(node.id);
+        if (cellDims) {
+          const cellData = node.data as CellNodeData;
+          return {
+            ...node,
+            position: { x: position.x, y: position.y },
+            data: {
+              ...cellData,
+              width: cellDims.width,
+              height: cellDims.height,
+            },
+          };
+        }
+      }
+      return {
+        ...node,
+        position: { x: position.x, y: position.y },
+      };
+    }
+    return node;
+  });
+
+  return {
+    nodes: layoutedNodes,
+    edges: state.edges,
+  };
+}
+
+/**
+ * Get the LayoutEngine class for direct use
+ */
+export { LayoutEngine } from './layout';
+export type { LayoutEngineOptions } from './layout';

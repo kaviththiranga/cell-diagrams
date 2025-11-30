@@ -6,12 +6,15 @@
 
 import { useMemo } from 'react';
 import { parse } from '@cell-diagrams/core';
-import { astToDiagram, applyLayout } from '../converter';
+import { astToDiagram, applyLayoutWithEngine } from '../converter';
 import type { DiagramState, LayoutOptions } from '../types';
+import type { LayoutEngineOptions } from '../layout';
 
 export interface UseCellDiagramOptions {
   source?: string;
   layoutOptions?: LayoutOptions;
+  /** Options for the new layout engine (auto-positioning, dynamic sizing, etc.) */
+  layoutEngineOptions?: Partial<LayoutEngineOptions>;
 }
 
 export interface UseCellDiagramResult {
@@ -29,9 +32,15 @@ export interface UseCellDiagramResult {
 
 /**
  * Hook to parse Cell Diagrams source and convert to React Flow state.
+ * Uses the new LayoutEngine for auto-positioning with:
+ * - Two-graph strategy (linked/unlinked node separation)
+ * - Dynamic cell sizing
+ * - Grid fallback for overlaps
+ * - Boundary positioning for externals
+ * - Bezier edge routing
  */
 export function useCellDiagram(options: UseCellDiagramOptions): UseCellDiagramResult {
-  const { source = '', layoutOptions } = options;
+  const { source = '', layoutEngineOptions } = options;
 
   return useMemo(() => {
     if (!source.trim()) {
@@ -59,13 +68,13 @@ export function useCellDiagram(options: UseCellDiagramOptions): UseCellDiagramRe
     // Convert AST to diagram
     const diagram = astToDiagram(parseResult.ast);
 
-    // Apply layout
-    const layoutedDiagram = applyLayout(diagram, layoutOptions);
+    // Apply layout using the new LayoutEngine
+    const layoutedDiagram = applyLayoutWithEngine(diagram, layoutEngineOptions);
 
     return {
       diagram: layoutedDiagram,
       success: true,
       errors: [],
     };
-  }, [source, layoutOptions]);
+  }, [source, layoutEngineOptions]);
 }
