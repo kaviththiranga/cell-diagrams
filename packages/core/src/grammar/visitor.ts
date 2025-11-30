@@ -302,6 +302,7 @@ class CellDiagramsVisitor extends BaseCstVisitor {
     gatewayProperty?: CstNode[];
   }): GatewayDefinition {
     const id = ctx.gatewayId?.[0]?.image || 'gateway';
+    let label: string | undefined;
     let exposes: EndpointType[] = [];
     let policies: string[] | undefined;
     let auth: AuthConfig | undefined;
@@ -315,6 +316,9 @@ class CellDiagramsVisitor extends BaseCstVisitor {
 
         if (result) {
           switch (result._type) {
+            case 'label':
+              label = result.value as string;
+              break;
             case 'exposes':
               exposes = result.value as EndpointType[];
               break;
@@ -332,6 +336,7 @@ class CellDiagramsVisitor extends BaseCstVisitor {
     return {
       type: 'GatewayDefinition',
       id,
+      ...(label !== undefined && { label }),
       exposes,
       ...(policies !== undefined && { policies }),
       ...(auth !== undefined && { auth }),
@@ -339,10 +344,15 @@ class CellDiagramsVisitor extends BaseCstVisitor {
   }
 
   gatewayProperty(ctx: {
+    labelProperty?: CstNode[];
     exposesProperty?: CstNode[];
     policiesProperty?: CstNode[];
     authProperty?: CstNode[];
   }): { _type: string; value: unknown } | null {
+    if (ctx.labelProperty?.[0]) {
+      const value = this.visit(ctx.labelProperty[0]) as string;
+      return { _type: 'label', value };
+    }
     if (ctx.exposesProperty?.[0]) {
       const value = this.visit(ctx.exposesProperty[0]) as EndpointType[];
       return { _type: 'exposes', value };

@@ -12,7 +12,18 @@ export { useCellDiagram } from './hooks';
 export type { UseCellDiagramOptions, UseCellDiagramResult } from './hooks';
 
 // Custom nodes
-export { CellNode, ExternalNode, UserNode, ApplicationNode, nodeTypes } from './nodes';
+export {
+  CellNode,
+  ExternalNode,
+  UserNode,
+  ApplicationNode,
+  ComponentNode,
+  GatewayNode,
+  nodeTypes,
+} from './nodes';
+
+// Icons
+export * from './nodes/icons';
 
 // Custom edges
 export { ConnectionEdge, edgeTypes } from './edges';

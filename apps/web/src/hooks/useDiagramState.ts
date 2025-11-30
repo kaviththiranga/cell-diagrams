@@ -44,11 +44,17 @@ export function useDiagramState(initialSource: string): UseDiagramStateResult {
     let edgeCount = 0;
 
     for (const stmt of result.ast.statements) {
-      if (stmt.type === 'CellDefinition' || stmt.type === 'ExternalDefinition' || stmt.type === 'UserDefinition') {
+      if (stmt.type === 'CellDefinition') {
+        nodeCount++;
+        // Count internal connections within cells
+        edgeCount += stmt.connections.length;
+      }
+      if (stmt.type === 'ExternalDefinition' || stmt.type === 'UserDefinition' || stmt.type === 'ApplicationDefinition') {
         nodeCount++;
       }
-      if (stmt.type === 'Connection') {
-        edgeCount++;
+      if (stmt.type === 'ConnectionsBlock') {
+        // Count top-level connections
+        edgeCount += stmt.connections.length;
       }
     }
 

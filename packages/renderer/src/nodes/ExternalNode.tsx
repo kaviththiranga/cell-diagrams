@@ -1,45 +1,37 @@
 /**
- * ExternalNode Component
+ * ExternalNode Component - Minimalist Excalidraw-style
  *
- * Renders an external system (SaaS, partner API, enterprise system)
+ * Renders a circular node with cloud icon inside (filled for external services).
  */
 
 import { memo } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import type { ExternalNode as ExternalNodeType, ExternalNodeData } from '../types';
-import { EXTERNAL_TYPE_ICONS } from '../types';
+import { CloudIcon } from './icons';
 
 function ExternalNodeComponent({ data, selected }: NodeProps<ExternalNodeType>) {
   const extData = data as ExternalNodeData;
-  const icon = EXTERNAL_TYPE_ICONS[extData.externalType] ?? '🌐';
 
   return (
-    <div className={`external-node external-${extData.externalType} ${selected ? 'selected' : ''}`}>
-      {/* Input Handle */}
-      <Handle type="target" position={Position.Top} className="external-handle" />
+    <div className={`excalidraw-node external-node ${selected ? 'selected' : ''}`}>
+      {/* Handles for all four directions */}
+      <Handle type="target" position={Position.Top} id="top" className="excalidraw-handle" />
+      <Handle type="source" position={Position.Bottom} id="bottom" className="excalidraw-handle" />
+      <Handle type="target" position={Position.Left} id="left" className="excalidraw-handle" />
+      <Handle type="source" position={Position.Right} id="right" className="excalidraw-handle" />
 
-      {/* Icon */}
-      <div className="external-node-icon">{icon}</div>
+      {/* Circular icon container - filled background for external */}
+      <div className="excalidraw-circle external-circle filled">
+        <CloudIcon size={24} color="#ffffff" />
+      </div>
 
-      {/* Label */}
-      <div className="external-node-label">{extData.label}</div>
-
-      {/* Type badge */}
-      <div className="external-node-type">{extData.externalType}</div>
-
-      {/* Provides endpoints */}
-      {extData.provides && extData.provides.length > 0 && (
-        <div className="external-node-provides">
-          {extData.provides.map((ep, idx) => (
-            <span key={idx} className={`provides-badge provides-${ep}`}>
-              {ep}
-            </span>
-          ))}
-        </div>
-      )}
-
-      {/* Output Handle */}
-      <Handle type="source" position={Position.Bottom} className="external-handle" />
+      {/* Label below - can be multi-line */}
+      <div className="excalidraw-label external-label">
+        {extData.label}
+        {extData.externalType && (
+          <span className="external-type-hint">({extData.externalType})</span>
+        )}
+      </div>
     </div>
   );
 }

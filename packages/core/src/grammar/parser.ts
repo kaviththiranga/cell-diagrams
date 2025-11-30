@@ -246,10 +246,11 @@ export class CellDiagramsParser extends CstParser {
   });
 
   /**
-   * GatewayProperty = ExposesProperty | PoliciesProperty | AuthProperty
+   * GatewayProperty = LabelProperty | ExposesProperty | PoliciesProperty | AuthProperty
    */
   private gatewayProperty = this.RULE('gatewayProperty', () => {
     this.OR([
+      { ALT: () => this.SUBRULE(this.labelProperty) },
       { ALT: () => this.SUBRULE(this.exposesProperty) },
       { ALT: () => this.SUBRULE(this.policiesProperty) },
       { ALT: () => this.SUBRULE(this.authProperty) },

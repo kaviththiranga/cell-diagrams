@@ -56,6 +56,10 @@ export interface CellNodeData extends Record<string, unknown> {
   components: ComponentNodeData[];
   clusters: ClusterNodeData[];
   internalConnections: Array<{ source: string; target: string }>;
+  /** Width of the cell boundary (for minimalist rendering) */
+  width?: number;
+  /** Height of the cell boundary (for minimalist rendering) */
+  height?: number;
 }
 
 /** Data for an External system node */
@@ -115,7 +119,14 @@ export type ExternalNode = Node<ExternalNodeData, 'external'>;
 export type UserNode = Node<UserNodeData, 'user'>;
 export type ApplicationNode = Node<ApplicationNodeData, 'application'>;
 
-export type DiagramNode = CellNode | ExternalNode | UserNode | ApplicationNode;
+// Import component and gateway node data types
+import type { ComponentNodeData as CompNodeData } from './nodes/ComponentNode';
+import type { GatewayNodeData as GwNodeData } from './nodes/GatewayNode';
+
+export type ComponentNode = Node<CompNodeData, 'component'>;
+export type GatewayNode = Node<GwNodeData, 'gateway'>;
+
+export type DiagramNode = CellNode | ExternalNode | UserNode | ApplicationNode | ComponentNode | GatewayNode;
 export type DiagramEdge = Edge<ConnectionEdgeData>;
 
 // ============================================

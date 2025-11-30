@@ -252,106 +252,95 @@ export function registerCellDiagramsLanguage(monaco: typeof Monaco): void {
 /**
  * Default Cell Diagrams sample code (Cell-Based Architecture)
  */
-export const defaultSampleCode = `// E-Commerce Cell-Based Architecture Example
-// Based on WSO2 Cell-Based Architecture Reference
+export const defaultSampleCode = `// Cell-Based Architecture Example
+// Based on reference diagram
 
-diagram ECommerce {
+diagram ProjectExample {
 
-  // Order Management Cell (Logic Cell)
-  cell OrderCell {
-    label: "Order Management"
+  // User accessing the system
+  user EndUser {
+    type: external
+  }
+
+  // Frontend SPA
+  external FrontendSPA {
+    label: "Frontend SPA"
+    type: enterprise
+    provides: [api]
+  }
+
+  // Project Foo Cell (Left cell)
+  cell ProjectFoo {
+    label: "Project Foo"
     type: logic
 
     gateway {
-      exposes: [api, events]
-      policies: ["rate-limit", "circuit-breaker"]
-      auth: local-sts
-    }
-
-    components {
-      microservice OrderService [tech: "Node.js", replicas: 3]
-      microservice CartService [tech: "Node.js"]
-      function OrderValidator [tech: "Lambda"]
-      database OrderDB [tech: "PostgreSQL"]
-      broker OrderEvents [tech: "Kafka"]
-    }
-
-    cluster Processing {
-      microservice PaymentProcessor
-      microservice FulfillmentService
-    }
-  }
-
-  // Customer Data Cell (Data Cell)
-  cell CustomerCell {
-    label: "Customer Management"
-    type: data
-
-    gateway {
-      exposes: [api]
-      auth: federated
-    }
-
-    components {
-      microservice CustomerService [tech: "Go"]
-      database CustomerDB [tech: "MongoDB"]
-      cache CustomerCache [tech: "Redis"]
-    }
-  }
-
-  // Security Cell
-  cell SecurityCell {
-    label: "Identity & Access"
-    type: security
-
-    gateway {
+      label: "External gateway"
       exposes: [api]
     }
 
     components {
-      idp IdentityProvider [tech: "Keycloak"]
-      sts TokenService
-      userstore UserDirectory [tech: "LDAP"]
+      microservice ComponentX
+      microservice ComponentY
+      microservice ComponentZ
+      database DB1 [tech: "PostgreSQL"]
+    }
+
+    // Internal connections
+    connections {
+      ComponentX -> ComponentY
+      ComponentX -> ComponentZ
+      ComponentY -> DB1
     }
   }
 
-  // External Systems
-  external Stripe {
-    label: "Payment Gateway"
+  // Project Bar Cell (Right cell with multiple gateways)
+  cell ProjectBar {
+    label: "Project Bar"
+    type: logic
+
+    gateway {
+      label: "Internal gateway"
+      exposes: [api]
+    }
+
+    components {
+      microservice ComponentA
+      microservice ComponentB
+      database DB2 [tech: "PostgreSQL"]
+      legacy LegacyService
+      adapter Adapter
+    }
+
+    // Internal connections
+    connections {
+      ComponentA -> ComponentB
+      ComponentB -> DB2
+      LegacyService -> Adapter
+      Adapter -> ComponentB
+    }
+  }
+
+  // External third-party service
+  external ThirdParty {
+    label: "Third-party service (external)"
     type: saas
     provides: [api]
   }
 
-  external ShippingPartner {
-    label: "Logistics Provider"
-    type: partner
-    provides: [api, events]
-  }
-
-  // Users / Actors
-  user Customer {
-    type: external
-    channels: [web, mobile]
-  }
-
-  user Admin {
-    type: internal
-    channels: [web]
-  }
-
-  // Inter-cell connections
+  // Inter-cell and external connections
   connections {
-    // Northbound (external to cell)
-    Customer -> OrderCell [northbound, via: "gateway"]
-    Admin -> OrderCell [northbound, via: "gateway"]
+    // User to Frontend
+    EndUser -> FrontendSPA
 
-    // Eastbound (cell to cell)
-    OrderCell -> CustomerCell [eastbound, protocol: "gRPC"]
-    OrderCell -> SecurityCell [eastbound]
+    // Frontend to Cell via gateway
+    FrontendSPA -> ProjectFoo [northbound]
 
-    // Southbound (cell to external)
-    OrderCell -> Stripe [southbound, via: "PaymentProcessor"]
-    OrderCell -> ShippingPartner [southbound]
+    // Cell to Cell (eastbound)
+    ProjectFoo.ComponentY -> ProjectBar [eastbound]
+
+    // Cell to external (southbound)
+    ProjectBar -> ThirdParty [southbound]
   }
 
 }

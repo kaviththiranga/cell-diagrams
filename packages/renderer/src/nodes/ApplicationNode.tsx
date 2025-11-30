@@ -17,8 +17,11 @@ function ApplicationNodeComponent({ data, selected }: NodeProps<ApplicationNodeT
 
   return (
     <div className={`application-node ${selected ? 'selected' : ''}`}>
-      {/* Input Handle */}
-      <Handle type="target" position={Position.Top} className="application-handle" />
+      {/* Handles for all four directions */}
+      <Handle type="target" position={Position.Top} id="top" className="application-handle" />
+      <Handle type="source" position={Position.Bottom} id="bottom" className="application-handle" />
+      <Handle type="target" position={Position.Left} id="left" className="application-handle" />
+      <Handle type="source" position={Position.Right} id="right" className="application-handle" />
 
       {/* Header */}
       <div className="application-node-header">
@@ -45,9 +48,6 @@ function ApplicationNodeComponent({ data, selected }: NodeProps<ApplicationNodeT
           </div>
         </div>
       )}
-
-      {/* Output Handle */}
-      <Handle type="source" position={Position.Bottom} className="application-handle" />
     </div>
   );
 }

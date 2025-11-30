@@ -178,7 +178,14 @@ function stringifyGateway(
   const i1 = indent.repeat(baseIndent + 1);
   const lines: string[] = [];
 
-  lines.push(`${i0}gateway ${gateway.id} {`);
+  // If gateway has an explicit ID that's not 'gateway', include it
+  const gatewayId = gateway.id && gateway.id !== 'gateway' ? ` ${gateway.id}` : '';
+  lines.push(`${i0}gateway${gatewayId} {`);
+
+  // Label property
+  if (gateway.label) {
+    lines.push(`${i1}label: "${escapeString(gateway.label)}"`);
+  }
 
   if (gateway.exposes.length > 0) {
     lines.push(`${i1}exposes: [${gateway.exposes.join(', ')}]`);

@@ -102,6 +102,13 @@ export type AuthType =
   | 'local-sts'   // STS inside the cell
   | 'federated';  // Federated to external IDP
 
+/** Gateway position on cell boundary */
+export type GatewayPosition =
+  | 'north'   // Top of cell (external ingress)
+  | 'south'   // Bottom of cell (egress to external)
+  | 'east'    // Right side (eastbound to other cells)
+  | 'west';   // Left side (westbound from other cells)
+
 // ============================================
 // AST Node Definitions
 // ============================================
@@ -136,8 +143,10 @@ export interface CellDefinition extends BaseNode {
   label?: string;
   /** Cell classification type */
   cellType: CellType;
-  /** Gateway at cell boundary (control point) */
+  /** Gateway at cell boundary (control point) - deprecated, use gateways array */
   gateway?: GatewayDefinition;
+  /** Multiple gateways at different positions on cell boundary */
+  gateways?: GatewayDefinition[];
   /** Components inside the cell */
   components: (ComponentDefinition | ClusterDefinition)[];
   /** Internal connections between components */
@@ -153,6 +162,10 @@ export interface GatewayDefinition extends BaseNode {
   type: 'GatewayDefinition';
   /** Gateway identifier */
   id: string;
+  /** Position on cell boundary (north, south, east, west) */
+  position?: GatewayPosition;
+  /** Gateway type label (e.g., "External gateway", "Internal gateway", "Egress gateway") */
+  label?: string;
   /** Endpoint types exposed by this gateway */
   exposes: EndpointType[];
   /** Security/governance policies applied at gateway */

@@ -59,52 +59,59 @@ export const Identifier = createToken({
 // Keywords that have longer versions (must define longer ones first)
 // ============================================
 
-// "cells" is longer than "cell"
+// Define tokens that have prefix relationships
+// The longer_alt is used to specify: if I match, check this longer alternative first
+
+// "cells" vs "cell" - cells is longer
 export const Cells = createToken({
   name: 'Cells',
   pattern: /cells/,
-  longer_alt: Identifier
+  longer_alt: Identifier, // cells could be start of identifier like "cellsData"
 });
+
 export const Cell = createToken({
   name: 'Cell',
   pattern: /cell/,
-  longer_alt: Cells
+  longer_alt: Identifier, // cell could be start of identifier
 });
 
-// "userstore" is longer than "user"
+// "userstore" vs "user"
 export const Userstore = createToken({
   name: 'Userstore',
   pattern: /userstore/,
-  longer_alt: Identifier
+  longer_alt: Identifier,
 });
+
 export const User = createToken({
   name: 'User',
   pattern: /user/,
-  longer_alt: Userstore
+  longer_alt: Identifier,
 });
 
-// "channels" is longer than "channel"
+// "channels" vs "channel"
 export const Channels = createToken({
   name: 'Channels',
   pattern: /channels/,
-  longer_alt: Identifier
+  longer_alt: Identifier,
 });
+
 export const Channel = createToken({
   name: 'Channel',
   pattern: /channel/,
-  longer_alt: Channels
+  longer_alt: Identifier,
 });
 
-// "database" is longer than "data"
+// "database" vs "data"
 export const Database = createToken({
   name: 'Database',
   pattern: /database/,
-  longer_alt: Identifier
+  longer_alt: Identifier,
 });
+
 export const Data = createToken({
   name: 'Data',
   pattern: /data/,
-  longer_alt: Database
+  longer_alt: Identifier,
 });
 
 // ============================================
