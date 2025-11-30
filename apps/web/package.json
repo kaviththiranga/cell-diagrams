@@ -12,6 +12,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
+    "@cell-diagrams/collab-client": "workspace:*",
     "@cell-diagrams/core": "workspace:*",
     "@cell-diagrams/renderer": "workspace:*",
     "@monaco-editor/react": "^4.6.0",

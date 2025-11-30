@@ -1,0 +1,31 @@
+{
+  "name": "@cell-diagrams/collab-server",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Hocuspocus collaboration server for Cell Diagrams",
+  "type": "module",
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@hocuspocus/server": "^2.13.7",
+    "@hocuspocus/extension-database": "^2.13.7",
+    "@hocuspocus/extension-logger": "^2.13.7",
+    "@hocuspocus/extension-throttle": "^2.13.7",
+    "better-sqlite3": "^11.7.0",
+    "dotenv": "^16.4.7",
+    "yjs": "^13.6.20"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/node": "^20.14.0",
+    "tsup": "^8.2.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.5.0"
+  }
+}

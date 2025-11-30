@@ -2,11 +2,21 @@
  * App Header Component
  */
 
+import type { ConnectionStatus, AwarenessState, CollabUser } from '@cell-diagrams/collab-client';
+import { CollaborationStatus } from './CollaborationStatus';
+
 interface HeaderProps {
   onReset?: () => void;
+  collaboration?: {
+    status: ConnectionStatus;
+    users: AwarenessState[];
+    currentUser: CollabUser;
+    onConnect: () => void;
+    onDisconnect: () => void;
+  };
 }
 
-export function Header({ onReset }: HeaderProps) {
+export function Header({ onReset, collaboration }: HeaderProps) {
   return (
     <header className="app-header">
       <div className="app-header-left">
@@ -26,6 +36,15 @@ export function Header({ onReset }: HeaderProps) {
         </div>
       </div>
       <div className="app-header-right">
+        {collaboration && (
+          <CollaborationStatus
+            status={collaboration.status}
+            users={collaboration.users}
+            currentUser={collaboration.currentUser}
+            onConnect={collaboration.onConnect}
+            onDisconnect={collaboration.onDisconnect}
+          />
+        )}
         <button className="header-button" onClick={onReset} title="Reset to example">
           <svg
             width="14"

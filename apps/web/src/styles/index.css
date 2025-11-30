@@ -348,3 +348,131 @@ body {
   white-space: nowrap;
   border-width: 0;
 }
+
+/* ============================================
+   Collaboration Status
+   ============================================ */
+
+.collab-status {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.collab-status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.collab-status-indicator .status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #9ca3af;
+}
+
+.collab-status-indicator.status-connected .status-dot {
+  background: #4ade80;
+  box-shadow: 0 0 6px #4ade80;
+}
+
+.collab-status-indicator.status-connecting .status-dot {
+  background: #fbbf24;
+  animation: pulse 1s ease-in-out infinite;
+}
+
+.collab-status-indicator.status-disconnected .status-dot {
+  background: #9ca3af;
+}
+
+.collab-status-indicator.status-error .status-dot {
+  background: #f87171;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.collab-status-indicator .status-text {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+/* User Avatars */
+.collab-users {
+  display: flex;
+  align-items: center;
+}
+
+.collab-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid;
+  background: #4f46e5;
+  color: white;
+  font-size: 10px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: -8px;
+  cursor: default;
+  transition: transform 0.15s;
+}
+
+.collab-avatar:first-child {
+  margin-left: 0;
+}
+
+.collab-avatar:hover {
+  transform: scale(1.1);
+  z-index: 1;
+}
+
+.collab-avatar.current {
+  background: #7c3aed;
+}
+
+.collab-avatar.overflow {
+  background: #64748b;
+  border-color: #64748b;
+  font-size: 9px;
+}
+
+/* Collaboration Button */
+.collab-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  color: white;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+
+.collab-button:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.collab-button.disconnect {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+.collab-button.disconnect:hover {
+  background: rgba(239, 68, 68, 0.3);
+}
