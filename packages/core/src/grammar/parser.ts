@@ -661,13 +661,16 @@ export class CellDiagramsParser extends CstParser {
   });
 
   /**
-   * EngineProperty = "engine" (StringLiteral | Identifier)
+   * EngineProperty = "engine" (StringLiteral | Identifier | ProtocolKeyword)
+   * Accepts protocol keywords like kafka as valid engine values
    */
   private engineProperty = this.RULE('engineProperty', () => {
     this.CONSUME(Engine);
     this.OPTION(() => this.CONSUME(Colon));
     this.OR([
       { ALT: () => this.CONSUME(StringLiteral, { LABEL: 'engineValue' }) },
+      // Allow protocol keywords as engine values (e.g., kafka for message brokers)
+      { ALT: () => this.CONSUME(Kafka, { LABEL: 'engineValue' }) },
       { ALT: () => this.CONSUME(Identifier, { LABEL: 'engineValue' }) },
     ]);
   });
@@ -1198,13 +1201,17 @@ export class CellDiagramsParser extends CstParser {
   });
 
   /**
-   * ChannelValue = Identifier | StringLiteral | channel keywords
+   * ChannelValue = Identifier | StringLiteral | channel keywords | endpoint keywords
    */
   private channelValue = this.RULE('channelValue', () => {
     this.OR([
       { ALT: () => this.CONSUME(Webapp, { LABEL: 'channel' }) },
       { ALT: () => this.CONSUME(Mobile, { LABEL: 'channel' }) },
       { ALT: () => this.CONSUME(Iot, { LABEL: 'channel' }) },
+      // Allow endpoint types as channel values (e.g., api, events, stream)
+      { ALT: () => this.CONSUME(Api, { LABEL: 'channel' }) },
+      { ALT: () => this.CONSUME(Events, { LABEL: 'channel' }) },
+      { ALT: () => this.CONSUME(Stream, { LABEL: 'channel' }) },
       { ALT: () => this.CONSUME(Identifier, { LABEL: 'channel' }) },
       { ALT: () => this.CONSUME(StringLiteral, { LABEL: 'channel' }) },
     ]);

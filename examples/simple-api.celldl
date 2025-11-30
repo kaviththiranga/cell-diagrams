@@ -42,6 +42,6 @@ workspace "Simple API" {
 
   // Simple flow
   flow {
-    API Consumer -> API Service
+    APIConsumer -> APIService
   }
 }

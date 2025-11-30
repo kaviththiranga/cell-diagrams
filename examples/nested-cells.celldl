@@ -98,8 +98,8 @@ workspace "Banking Platform" {
     flow {
       account-service -> banking-db
       transaction-service -> banking-db
-      account-service -> Loan Processing
-      account-service -> Card Services
+      account-service -> LoanProcessing
+      account-service -> CardServices
     }
   }
 
@@ -114,12 +114,12 @@ workspace "Banking Platform" {
 
   // Inter-system flows
   flow "customer-journey" {
-    Customer -> Core Banking : "banking operations"
-    Banker -> Core Banking : "account management"
+    Customer -> CoreBanking : "banking operations"
+    Banker -> CoreBanking : "account management"
   }
 
   flow "external-integrations" {
-    Core Banking -> Credit Bureau : "credit check"
-    Core Banking -> Payment Network : "card transactions"
+    CoreBanking -> CreditBureau : "credit check"
+    CoreBanking -> PaymentNetwork : "card transactions"
   }
 }
