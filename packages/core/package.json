@@ -1,0 +1,42 @@
+{
+  "name": "@cell-diagrams/core",
+  "version": "0.1.0",
+  "description": "Parser and AST for Cell Diagrams DSL",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./lexer": {
+      "import": "./dist/grammar/lexer.js",
+      "types": "./dist/grammar/lexer.d.ts"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist coverage"
+  },
+  "dependencies": {
+    "chevrotain": "^11.0.3"
+  },
+  "devDependencies": {
+    "tsup": "^8.2.0",
+    "typescript": "^5.5.0",
+    "vitest": "^2.0.0"
+  },
+  "keywords": ["cell-diagrams", "parser", "ast", "dsl"],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-org/cell-diagrams",
+    "directory": "packages/core"
+  }
+}
