@@ -1,25 +1,47 @@
 import { describe, it, expect } from 'vitest';
 import { parse, parseOrThrow, validate, stringify } from '../index';
 
-describe('Cell Diagrams Parser', () => {
+describe('CellDL Parser', () => {
   describe('parse()', () => {
+    it('should parse a simple workspace', () => {
+      const source = `
+workspace "Test Workspace" {
+  version "1.0.0"
+  description "A test workspace"
+}
+`;
+      const result = parse(source);
+
+      expect(result.success).toBe(true);
+      expect(result.errors).toHaveLength(0);
+      expect(result.ast).not.toBeNull();
+      expect(result.ast!.name).toBe('Test Workspace');
+      expect(result.ast!.version).toBe('1.0.0');
+      expect(result.ast!.description).toBe('A test workspace');
+    });
+
     it('should parse a simple cell definition', () => {
       const source = `
-cell OrderCell {
-  name: "Order Management"
-  type: logic
+cell "Order Management" type:logic {
+  description "Handles order processing"
 
-  components {
-    ms OrderService
-    db OrderDB
+  gateway ingress {
+    protocol https
+    port 443
   }
 
-  connect {
-    OrderService -> OrderDB
+  component "order-service" {
+    source "company/order-service:latest"
+    port 8080
   }
 
-  expose {
-    api: OrderService
+  database "order-db" {
+    engine postgresql
+    storage "100Gi"
+  }
+
+  flow {
+    order-service -> order-db
   }
 }
 `;
@@ -34,21 +56,33 @@ cell OrderCell {
       expect(cell.type).toBe('CellDefinition');
 
       if (cell.type === 'CellDefinition') {
-        expect(cell.id).toBe('OrderCell');
-        expect(cell.name).toBe('Order Management');
+        expect(cell.label).toBe('Order Management');
         expect(cell.cellType).toBe('logic');
+        expect(cell.description).toBe('Handles order processing');
         expect(cell.components).toHaveLength(2);
-        expect(cell.internalConnections).toHaveLength(1);
-        expect(cell.exposedEndpoints).toHaveLength(1);
+        expect(cell.gateways).toHaveLength(1);
+        expect(cell.flows).toHaveLength(1);
       }
     });
 
-    it('should parse component attributes', () => {
+    it('should parse gateway with routes', () => {
       const source = `
-cell TestCell {
-  components {
-    db MainDB [tech: "PostgreSQL", replicas: 3]
-    ms Service [async, readonly: true]
+cell "API Cell" type:logic {
+  gateway ingress "api-gateway" {
+    protocol https
+    port 443
+    context "/api"
+
+    route "/users" -> user-service
+    route "/orders" -> order-service
+  }
+
+  component "user-service" {
+    port 8080
+  }
+
+  component "order-service" {
+    port 8081
   }
 }
 `;
@@ -58,25 +92,112 @@ cell TestCell {
 
       const cell = result.ast!.statements[0];
       if (cell.type === 'CellDefinition') {
-        expect(cell.components[0].attributes).toHaveLength(2);
-        expect(cell.components[0].attributes[0].key).toBe('tech');
-        expect(cell.components[0].attributes[0].value).toBe('PostgreSQL');
-        expect(cell.components[0].attributes[1].key).toBe('replicas');
-        expect(cell.components[0].attributes[1].value).toBe(3);
+        expect(cell.gateways).toHaveLength(1);
+        const gateway = cell.gateways[0];
+        expect(gateway.direction).toBe('ingress');
+        expect(gateway.id).toBe('api-gateway');
+        expect(gateway.routes).toHaveLength(2);
+        expect(gateway.routes[0].path).toBe('/users');
+        expect(gateway.routes[0].target).toBe('user-service');
+      }
+    });
 
-        expect(cell.components[1].attributes).toHaveLength(2);
-        expect(cell.components[1].attributes[0].key).toBe('async');
-        expect(cell.components[1].attributes[0].value).toBeUndefined();
-        expect(cell.components[1].attributes[1].key).toBe('readonly');
-        expect(cell.components[1].attributes[1].value).toBe(true);
+    it('should parse multiple gateways (ingress and egress)', () => {
+      const source = `
+cell "Service Cell" type:logic {
+  gateway ingress {
+    protocol https
+    port 443
+  }
+
+  gateway egress "external-api" {
+    protocol https
+    target "https://api.example.com"
+    policy retry
+  }
+
+  component "service" {
+    port 8080
+  }
+}
+`;
+      const result = parse(source);
+
+      expect(result.success).toBe(true);
+
+      const cell = result.ast!.statements[0];
+      if (cell.type === 'CellDefinition') {
+        expect(cell.gateways).toHaveLength(2);
+        expect(cell.gateways[0].direction).toBe('ingress');
+        expect(cell.gateways[1].direction).toBe('egress');
+        expect(cell.gateways[1].id).toBe('external-api');
+        expect(cell.gateways[1].target).toBe('https://api.example.com');
+        expect(cell.gateways[1].policy).toBe('retry');
+      }
+    });
+
+    it('should parse component with env block', () => {
+      const source = `
+cell "Test" type:logic {
+  component "service" {
+    source "company/service:latest"
+    port 8080
+    env {
+      DB_HOST = "localhost"
+      DB_PORT = "5432"
+    }
+  }
+}
+`;
+      const result = parse(source);
+
+      expect(result.success).toBe(true);
+
+      const cell = result.ast!.statements[0];
+      if (cell.type === 'CellDefinition') {
+        expect(cell.components).toHaveLength(1);
+        const comp = cell.components[0];
+        if (comp.type === 'ComponentDefinition') {
+          expect(comp.source).toBe('company/service:latest');
+          expect(comp.port).toBe(8080);
+          expect(comp.env).toHaveLength(2);
+          expect(comp.env[0].key).toBe('DB_HOST');
+          expect(comp.env[0].value).toBe('localhost');
+        }
+      }
+    });
+
+    it('should parse database component', () => {
+      const source = `
+cell "Data Cell" type:data {
+  database "main-db" {
+    engine postgresql
+    storage "500Gi"
+    version "15.0"
+  }
+}
+`;
+      const result = parse(source);
+
+      expect(result.success).toBe(true);
+
+      const cell = result.ast!.statements[0];
+      if (cell.type === 'CellDefinition') {
+        expect(cell.components).toHaveLength(1);
+        const db = cell.components[0];
+        if (db.type === 'ComponentDefinition') {
+          expect(db.componentType).toBe('database');
+          expect(db.engine).toBe('postgresql');
+          expect(db.storage).toBe('500Gi');
+          expect(db.version).toBe('15.0');
+        }
       }
     });
 
     it('should parse external definitions', () => {
       const source = `
-external Stripe {
-  name: "Stripe Payment Gateway"
-  type: saas
+external "Stripe Payment" type:saas {
+  provides [api]
 }
 `;
       const result = parse(source);
@@ -88,14 +209,18 @@ external Stripe {
       expect(ext.type).toBe('ExternalDefinition');
 
       if (ext.type === 'ExternalDefinition') {
-        expect(ext.id).toBe('Stripe');
-        expect(ext.name).toBe('Stripe Payment Gateway');
+        expect(ext.label).toBe('Stripe Payment');
         expect(ext.externalType).toBe('saas');
+        expect(ext.provides).toEqual(['api']);
       }
     });
 
     it('should parse user definitions', () => {
-      const source = `user Customer [type: external, channel: web]`;
+      const source = `
+user "Customer" type:external {
+  channels [web, mobile]
+}
+`;
       const result = parse(source);
 
       expect(result.success).toBe(true);
@@ -104,29 +229,75 @@ external Stripe {
       expect(user.type).toBe('UserDefinition');
 
       if (user.type === 'UserDefinition') {
-        expect(user.id).toBe('Customer');
-        expect(user.attributes).toHaveLength(2);
+        expect(user.label).toBe('Customer');
+        expect(user.userType).toBe('external');
+        expect(user.channels).toEqual(['web', 'mobile']);
       }
     });
 
-    it('should parse inter-cell connections', () => {
-      const source = `connect OrderCell -> CustomerCell [via: CustomerGateway, label: "Get Customer"]`;
+    it('should parse top-level flow definitions', () => {
+      const source = `
+workspace "Test" {
+  cell "CellA" type:logic {
+    component "service-a" {
+      port 8080
+    }
+  }
+
+  cell "CellB" type:logic {
+    component "service-b" {
+      port 8080
+    }
+  }
+
+  flow "main-flow" {
+    CellA -> CellB : "data sync"
+    CellB -> CellA : "response"
+  }
+}
+`;
       const result = parse(source);
 
       expect(result.success).toBe(true);
 
-      const conn = result.ast!.statements[0];
-      expect(conn.type).toBe('Connection');
+      const flow = result.ast!.statements.find(s => s.type === 'FlowDefinition');
+      expect(flow).toBeDefined();
 
-      if (conn.type === 'Connection') {
-        expect(conn.source).toBe('OrderCell');
-        expect(conn.target).toBe('CustomerCell');
-        expect(conn.attributes).toHaveLength(2);
+      if (flow && flow.type === 'FlowDefinition') {
+        expect(flow.name).toBe('main-flow');
+        expect(flow.flows).toHaveLength(2);
+        expect(flow.flows[0].source).toBe('CellA');
+        expect(flow.flows[0].destination).toBe('CellB');
+        expect(flow.flows[0].label).toBe('data sync');
+      }
+    });
+
+    it('should parse flow chains', () => {
+      const source = `
+flow {
+  A -> B -> C -> D : "chain"
+}
+`;
+      const result = parse(source);
+
+      expect(result.success).toBe(true);
+
+      const flow = result.ast!.statements[0];
+      if (flow.type === 'FlowDefinition') {
+        // Chain A -> B -> C -> D becomes [A->B, B->C, C->D]
+        expect(flow.flows).toHaveLength(3);
+        expect(flow.flows[0].source).toBe('A');
+        expect(flow.flows[0].destination).toBe('B');
+        expect(flow.flows[1].source).toBe('B');
+        expect(flow.flows[1].destination).toBe('C');
+        expect(flow.flows[2].source).toBe('C');
+        expect(flow.flows[2].destination).toBe('D');
+        expect(flow.flows[2].label).toBe('chain');
       }
     });
 
     it('should handle parse errors gracefully', () => {
-      const source = `cell {}`;
+      const source = `cell {} type:`;
       const result = parse(source);
 
       expect(result.success).toBe(false);
@@ -137,21 +308,37 @@ external Stripe {
     it('should handle comments', () => {
       const source = `
 // This is a cell definition
-cell TestCell {
+cell "Test Cell" type:logic {
   /* Multi-line
      comment */
-  name: "Test"
+  description "Test"
 }
 `;
       const result = parse(source);
 
       expect(result.success).toBe(true);
     });
+
+    it('should parse workspace properties', () => {
+      const source = `
+workspace "Test" {
+  version "1.0.0"
+  property author = "Team A"
+  property environment = "production"
+}
+`;
+      const result = parse(source);
+
+      expect(result.success).toBe(true);
+      expect(result.ast!.properties).toHaveLength(2);
+      expect(result.ast!.properties[0].key).toBe('author');
+      expect(result.ast!.properties[0].value).toBe('Team A');
+    });
   });
 
   describe('parseOrThrow()', () => {
     it('should return AST for valid source', () => {
-      const ast = parseOrThrow('cell TestCell {}');
+      const ast = parseOrThrow('cell "Test" type:logic {}');
       expect(ast.type).toBe('Program');
     });
 
@@ -162,7 +349,7 @@ cell TestCell {
 
   describe('validate()', () => {
     it('should return empty array for valid source', () => {
-      const errors = validate('cell TestCell {}');
+      const errors = validate('cell "Test" type:logic {}');
       expect(errors).toHaveLength(0);
     });
 
@@ -173,13 +360,14 @@ cell TestCell {
   });
 
   describe('stringify()', () => {
-    it('should roundtrip through parse and stringify', () => {
-      const source = `cell TestCell {
-  name: "Test"
-  type: logic
+    it('should roundtrip workspace through parse and stringify', () => {
+      const source = `workspace "Test" {
+  version "1.0.0"
 
-  components {
-    ms TestService
+  cell "Service" type:logic {
+    component "api" {
+      port 8080
+    }
   }
 }
 `;
@@ -187,49 +375,18 @@ cell TestCell {
       const output = stringify(ast);
       const reparsed = parseOrThrow(output);
 
+      expect(reparsed.name).toBe('Test');
+      expect(reparsed.version).toBe('1.0.0');
       expect(reparsed.statements).toHaveLength(1);
       expect(reparsed.statements[0].type).toBe('CellDefinition');
     });
 
     it('should escape special characters in strings', () => {
-      const source = `cell TestCell {
-  name: "Test with \\"quotes\\" and\\nnewline"
-}
-`;
+      const source = `workspace "Test with \\"quotes\\" and\\nnewline" {}`;
       const ast = parseOrThrow(source);
 
-      const cell = ast.statements[0];
-      if (cell.type === 'CellDefinition') {
-        expect(cell.name).toBe('Test with "quotes" and\nnewline');
-      }
+      expect(ast.name).toBe('Test with "quotes" and\nnewline');
     });
-  });
-});
-
-describe('All Component Types', () => {
-  const componentTypes = [
-    ['ms', 'microservice'],
-    ['fn', 'function'],
-    ['db', 'database'],
-    ['gw', 'gateway'],
-    ['svc', 'service'],
-    ['broker', 'broker'],
-    ['cache', 'cache'],
-    ['legacy', 'legacy'],
-    ['esb', 'esb'],
-    ['idp', 'idp'],
-  ] as const;
-
-  it.each(componentTypes)('should parse %s as %s', (short, full) => {
-    const source = `cell TestCell { components { ${short} TestComp } }`;
-    const result = parse(source);
-
-    expect(result.success).toBe(true);
-
-    const cell = result.ast!.statements[0];
-    if (cell.type === 'CellDefinition') {
-      expect(cell.components[0].componentType).toBe(full);
-    }
   });
 });
 
@@ -237,7 +394,7 @@ describe('All Cell Types', () => {
   const cellTypes = ['logic', 'integration', 'legacy', 'data', 'security', 'channel'];
 
   it.each(cellTypes)('should parse cell type %s', (cellType) => {
-    const source = `cell TestCell { type: ${cellType} }`;
+    const source = `cell "Test" type:${cellType} {}`;
     const result = parse(source);
 
     expect(result.success).toBe(true);
@@ -249,18 +406,92 @@ describe('All Cell Types', () => {
   });
 });
 
-describe('All Endpoint Types', () => {
-  const endpointTypes = ['api', 'event', 'stream'];
-
-  it.each(endpointTypes)('should parse endpoint type %s', (epType) => {
-    const source = `cell TestCell { components { gw TestGw } expose { ${epType}: TestGw } }`;
+describe('Gateway Directions', () => {
+  it('should parse ingress gateway', () => {
+    const source = `
+cell "Test" type:logic {
+  gateway ingress {
+    protocol https
+  }
+}
+`;
     const result = parse(source);
-
     expect(result.success).toBe(true);
 
     const cell = result.ast!.statements[0];
     if (cell.type === 'CellDefinition') {
-      expect(cell.exposedEndpoints[0].endpointType).toBe(epType);
+      expect(cell.gateways[0].direction).toBe('ingress');
+    }
+  });
+
+  it('should parse egress gateway', () => {
+    const source = `
+cell "Test" type:logic {
+  gateway egress {
+    protocol https
+    target "https://api.example.com"
+  }
+}
+`;
+    const result = parse(source);
+    expect(result.success).toBe(true);
+
+    const cell = result.ast!.statements[0];
+    if (cell.type === 'CellDefinition') {
+      expect(cell.gateways[0].direction).toBe('egress');
+    }
+  });
+});
+
+describe('Protocol Types', () => {
+  const protocols = ['https', 'http', 'grpc', 'tcp', 'mtls', 'kafka'];
+
+  it.each(protocols)('should parse protocol %s', (protocol) => {
+    const source = `
+cell "Test" type:logic {
+  gateway ingress {
+    protocol ${protocol}
+  }
+}
+`;
+    const result = parse(source);
+    expect(result.success).toBe(true);
+
+    const cell = result.ast!.statements[0];
+    if (cell.type === 'CellDefinition') {
+      expect(cell.gateways[0].protocol).toBe(protocol);
+    }
+  });
+});
+
+describe('External System Types', () => {
+  const externalTypes = ['saas', 'partner', 'enterprise'];
+
+  it.each(externalTypes)('should parse external type %s', (extType) => {
+    const source = `external "Test" type:${extType} {}`;
+    const result = parse(source);
+
+    expect(result.success).toBe(true);
+
+    const ext = result.ast!.statements[0];
+    if (ext.type === 'ExternalDefinition') {
+      expect(ext.externalType).toBe(extType);
+    }
+  });
+});
+
+describe('User Types', () => {
+  const userTypes = ['external', 'internal', 'system'];
+
+  it.each(userTypes)('should parse user type %s', (userType) => {
+    const source = `user "Test" type:${userType} {}`;
+    const result = parse(source);
+
+    expect(result.success).toBe(true);
+
+    const user = result.ast!.statements[0];
+    if (user.type === 'UserDefinition') {
+      expect(user.userType).toBe(userType);
     }
   });
 });

@@ -1,0 +1,47 @@
+// Simple API Service Architecture
+// A minimal example demonstrating CellDL basics
+
+workspace "Simple API" {
+  version "1.0.0"
+  description "Basic API service with database"
+
+  // Single user type
+  user "API Consumer" type:external {
+  }
+
+  // Single cell with one gateway and a few components
+  cell "API Service" type:logic {
+    description "Main API service"
+
+    gateway ingress {
+      protocol https
+      port 443
+      context "/api/v1"
+
+      route "/users" -> api-handler
+      route "/data" -> api-handler
+    }
+
+    component "api-handler" {
+      source "company/api-handler:latest"
+      port 8080
+      env {
+        LOG_LEVEL = "info"
+      }
+    }
+
+    database "main-db" {
+      engine postgresql
+      storage "10Gi"
+    }
+
+    flow {
+      api-handler -> main-db
+    }
+  }
+
+  // Simple flow
+  flow {
+    API Consumer -> API Service
+  }
+}

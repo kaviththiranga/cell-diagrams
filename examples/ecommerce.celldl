@@ -1,0 +1,339 @@
+// E-Commerce Platform Architecture
+// Demonstrates the full CellDL syntax with workspace, cells, gateways, and flows
+
+workspace "E-Commerce Platform" {
+  version "2.0.0"
+  description "Modern e-commerce system using Cell-Based Architecture"
+  property author = "Architecture Team"
+  property environment = "production"
+
+  // ============================================
+  // Users
+  // ============================================
+
+  user "Customer" type:external {
+    channels [web, mobile, api]
+  }
+
+  user "Admin" type:internal {
+    channels [web]
+  }
+
+  user "Partner System" type:system {
+  }
+
+  // ============================================
+  // Identity & Access Cell
+  // ============================================
+
+  cell "Identity" type:security {
+    description "Handles authentication, authorization, and user management"
+    replicas 3
+
+    gateway ingress "auth-gateway" {
+      protocol https
+      port 443
+      context "/auth"
+      auth local-sts
+
+      route "/login" -> auth-service
+      route "/logout" -> auth-service
+      route "/register" -> user-service
+      route "/verify" -> auth-service
+      route "/token/refresh" -> token-service
+    }
+
+    component "auth-service" {
+      source "company/auth-service:v2.1.0"
+      port 8080
+      env {
+        JWT_SECRET = "${JWT_SECRET}"
+        TOKEN_EXPIRY = "3600"
+        REFRESH_EXPIRY = "86400"
+      }
+    }
+
+    component "user-service" {
+      source "company/user-service:v1.5.0"
+      port 8081
+    }
+
+    component "token-service" {
+      source "company/token-service:v1.2.0"
+      port 8082
+    }
+
+    database "user-db" {
+      engine postgresql
+      storage "100Gi"
+      version "15.0"
+    }
+
+    database "session-cache" {
+      engine redis
+      storage "10Gi"
+    }
+
+    flow {
+      auth-service -> user-db
+      auth-service -> session-cache
+      user-service -> user-db
+      token-service -> session-cache
+    }
+  }
+
+  // ============================================
+  // Product Catalog Cell
+  // ============================================
+
+  cell "Catalog" type:logic {
+    description "Product catalog, search, and inventory management"
+
+    gateway ingress {
+      protocol https
+      port 443
+      context "/products"
+
+      route "/search" -> search-service
+      route "/browse" -> catalog-service
+      route "/inventory" -> inventory-service
+    }
+
+    component "catalog-service" {
+      source "company/catalog-service:v3.0.0"
+      port 8080
+    }
+
+    component "search-service" {
+      source "company/search-service:v2.0.0"
+      port 8081
+    }
+
+    component "inventory-service" {
+      source "company/inventory-service:v1.8.0"
+      port 8082
+    }
+
+    database "product-db" {
+      engine postgresql
+      storage "500Gi"
+    }
+
+    database "search-index" {
+      engine elasticsearch
+      storage "200Gi"
+    }
+
+    flow {
+      catalog-service -> product-db
+      search-service -> search-index
+      inventory-service -> product-db
+      catalog-service -> search-index : "index updates"
+    }
+  }
+
+  // ============================================
+  // Order Processing Cell
+  // ============================================
+
+  cell "Orders" type:logic {
+    description "Order lifecycle management"
+
+    gateway ingress "order-api" {
+      protocol https
+      port 443
+      context "/orders"
+
+      route "/create" -> order-service
+      route "/status" -> order-service
+      route "/history" -> order-service
+    }
+
+    gateway egress "payment-egress" {
+      protocol https
+      target "https://api.stripe.com/v1"
+      policy retry
+    }
+
+    gateway egress "shipping-egress" {
+      protocol https
+      target "https://api.fedex.com"
+      policy circuit-breaker
+    }
+
+    component "order-service" {
+      source "company/order-service:v4.0.0"
+      port 8080
+    }
+
+    component "payment-processor" {
+      source "company/payment-processor:v2.5.0"
+      port 8081
+    }
+
+    component "shipping-coordinator" {
+      source "company/shipping-coordinator:v1.3.0"
+      port 8082
+    }
+
+    database "order-db" {
+      engine postgresql
+      storage "1Ti"
+    }
+
+    database "order-events" {
+      engine kafka
+      storage "500Gi"
+    }
+
+    flow {
+      order-service -> order-db
+      order-service -> order-events
+      order-service -> payment-processor
+      payment-processor -> order-events
+      shipping-coordinator -> order-events
+    }
+  }
+
+  // ============================================
+  // Shopping Cart Cell
+  // ============================================
+
+  cell "Cart" type:logic {
+    description "Shopping cart management"
+
+    gateway ingress {
+      protocol https
+      port 443
+      context "/cart"
+
+      route "/add" -> cart-service
+      route "/remove" -> cart-service
+      route "/checkout" -> checkout-service
+    }
+
+    component "cart-service" {
+      source "company/cart-service:v2.0.0"
+      port 8080
+    }
+
+    component "checkout-service" {
+      source "company/checkout-service:v1.5.0"
+      port 8081
+    }
+
+    database "cart-cache" {
+      engine redis
+      storage "50Gi"
+    }
+
+    flow {
+      cart-service -> cart-cache
+      checkout-service -> cart-cache
+    }
+  }
+
+  // ============================================
+  // Notification Cell
+  // ============================================
+
+  cell "Notifications" type:integration {
+    description "Multi-channel notification delivery"
+
+    gateway ingress {
+      protocol grpc
+      port 50051
+    }
+
+    gateway egress "email-egress" {
+      protocol https
+      target "https://api.sendgrid.com"
+    }
+
+    gateway egress "sms-egress" {
+      protocol https
+      target "https://api.twilio.com"
+    }
+
+    component "notification-router" {
+      source "company/notification-router:v1.0.0"
+      port 50051
+    }
+
+    component "email-sender" {
+      source "company/email-sender:v1.2.0"
+      port 8080
+    }
+
+    component "sms-sender" {
+      source "company/sms-sender:v1.1.0"
+      port 8081
+    }
+
+    component "push-sender" {
+      source "company/push-sender:v1.0.0"
+      port 8082
+    }
+
+    database "notification-queue" {
+      engine kafka
+      storage "100Gi"
+    }
+
+    flow {
+      notification-router -> notification-queue
+      notification-queue -> email-sender
+      notification-queue -> sms-sender
+      notification-queue -> push-sender
+    }
+  }
+
+  // ============================================
+  // External Systems
+  // ============================================
+
+  external "Stripe" type:saas {
+    provides [api]
+  }
+
+  external "SendGrid" type:saas {
+    provides [api]
+  }
+
+  external "Twilio" type:saas {
+    provides [api]
+  }
+
+  external "FedEx" type:partner {
+    provides [api]
+  }
+
+  external "Analytics Platform" type:enterprise {
+    provides [api, events]
+  }
+
+  // ============================================
+  // Inter-Cell Traffic Flows
+  // ============================================
+
+  flow "user-journey" {
+    Customer -> Identity : "authenticate"
+    Identity -> Catalog : "browse products"
+    Catalog -> Cart : "add to cart"
+    Cart -> Orders : "place order"
+  }
+
+  flow "order-fulfillment" {
+    Orders -> Stripe : "process payment"
+    Orders -> FedEx : "ship order"
+    Orders -> Notifications : "send confirmation"
+    Notifications -> SendGrid : "email"
+    Notifications -> Twilio : "sms"
+  }
+
+  flow "cross-cell-auth" {
+    Catalog -> Identity : "verify user"
+    Cart -> Identity : "verify user"
+    Orders -> Identity : "verify user"
+  }
+}

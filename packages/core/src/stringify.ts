@@ -1,8 +1,8 @@
 /**
- * Cell Diagrams Stringify
+ * CellDL Stringify
  *
- * Converts an AST back to Cell Diagrams DSL source code.
- * Updated for new Cell-Based Architecture DSL.
+ * Converts an AST back to CellDL (Cell Definition Language) source code.
+ * Supports new workspace/flow/route syntax.
  */
 
 import {
@@ -19,7 +19,10 @@ import {
   GatewayDefinition,
   ConnectionEndpoint,
   AttributeValue,
+  FlowDefinition,
+  FlowConnection,
   isClusterDefinition,
+  InternalConnection,
 } from './ast/types';
 
 // ============================================
@@ -46,19 +49,39 @@ const defaultOptions: Required<StringifyOptions> = {
 // ============================================
 
 /**
- * Convert an AST back to Cell Diagrams DSL source code.
+ * Convert an AST back to CellDL source code.
  *
  * @param ast - The AST to stringify
  * @param options - Formatting options
- * @returns The formatted DSL source code
+ * @returns The formatted CellDL source code
  */
 export function stringify(ast: Program, options: StringifyOptions = {}): string {
   const opts = { ...defaultOptions, ...options };
   const lines: string[] = [];
 
-  // Optional diagram wrapper
+  // Workspace wrapper (new CellDL syntax)
   if (ast.name) {
-    lines.push(`diagram "${escapeString(ast.name)}" {`);
+    lines.push(`workspace "${escapeString(ast.name)}" {`);
+
+    // Version
+    if (ast.version) {
+      lines.push(`${opts.indent}version "${escapeString(ast.version)}"`);
+    }
+
+    // Description
+    if (ast.description) {
+      lines.push(`${opts.indent}description "${escapeString(ast.description)}"`);
+    }
+
+    // Properties
+    for (const prop of ast.properties) {
+      lines.push(`${opts.indent}property ${prop.key} = "${escapeString(prop.value)}"`);
+    }
+
+    if (ast.version || ast.description || ast.properties.length > 0) {
+      lines.push('');
+    }
+
     for (const stmt of ast.statements) {
       const stmtStr = stringifyStatement(stmt, opts, 1);
       lines.push(stmtStr);
@@ -107,6 +130,8 @@ function stringifyStatement(
       return stringifyApplicationDefinition(stmt, opts, baseIndent);
     case 'ConnectionsBlock':
       return stringifyConnectionsBlock(stmt, opts, baseIndent);
+    case 'FlowDefinition':
+      return stringifyFlowDefinition(stmt, opts, baseIndent);
     default:
       return '';
   }
@@ -120,47 +145,60 @@ function stringifyCellDefinition(
   const { indent, lineEnding } = opts;
   const i0 = indent.repeat(baseIndent);
   const i1 = indent.repeat(baseIndent + 1);
-  const i2 = indent.repeat(baseIndent + 2);
   const lines: string[] = [];
 
-  lines.push(`${i0}cell ${cell.id} {`);
+  // New CellDL syntax: cell "Name" type:TYPE { }
+  const label = cell.label ? `"${escapeString(cell.label)}"` : `"${cell.id}"`;
+  lines.push(`${i0}cell ${label} type:${cell.cellType} {`);
 
-  // Label property
-  if (cell.label) {
-    lines.push(`${i1}label: "${escapeString(cell.label)}"`);
+  // Description
+  if (cell.description) {
+    lines.push(`${i1}description "${escapeString(cell.description)}"`);
   }
 
-  // Type property
-  lines.push(`${i1}type: ${cell.cellType}`);
+  // Replicas
+  if (cell.replicas !== undefined) {
+    lines.push(`${i1}replicas ${cell.replicas}`);
+  }
 
-  // Gateway block
-  if (cell.gateway) {
+  // Gateways (new multi-gateway syntax)
+  for (const gw of cell.gateways) {
+    lines.push('');
+    lines.push(stringifyGateway(gw, opts, baseIndent + 1));
+  }
+
+  // Legacy single gateway
+  if (cell.gateway && cell.gateways.length === 0) {
     lines.push('');
     lines.push(stringifyGateway(cell.gateway, opts, baseIndent + 1));
   }
 
-  // Components block
-  if (cell.components.length > 0) {
+  // Components
+  for (const comp of cell.components) {
     lines.push('');
-    lines.push(`${i1}components {`);
-    for (const comp of cell.components) {
-      if (isClusterDefinition(comp)) {
-        lines.push(stringifyCluster(comp, opts, baseIndent + 2));
-      } else {
-        lines.push(`${i2}${stringifyComponent(comp)}`);
-      }
+    if (isClusterDefinition(comp)) {
+      lines.push(stringifyCluster(comp, opts, baseIndent + 1));
+    } else {
+      lines.push(stringifyComponentBlock(comp, opts, baseIndent + 1));
     }
-    lines.push(`${i1}}`);
   }
 
-  // Internal connections block
+  // Internal flows
+  for (const flow of cell.flows) {
+    lines.push('');
+    lines.push(stringifyFlowDefinition(flow, opts, baseIndent + 1));
+  }
+
+  // Nested cells
+  for (const nestedCell of cell.nestedCells) {
+    lines.push('');
+    lines.push(stringifyCellDefinition(nestedCell, opts, baseIndent + 1));
+  }
+
+  // Legacy internal connections (convert to flow syntax)
   if (cell.connections.length > 0) {
     lines.push('');
-    lines.push(`${i1}connections {`);
-    for (const conn of cell.connections) {
-      lines.push(`${i2}${conn.source} -> ${conn.target}`);
-    }
-    lines.push(`${i1}}`);
+    lines.push(stringifyInternalConnections(cell.connections, opts, baseIndent + 1));
   }
 
   lines.push(`${i0}}`);
@@ -178,34 +216,138 @@ function stringifyGateway(
   const i1 = indent.repeat(baseIndent + 1);
   const lines: string[] = [];
 
-  // If gateway has an explicit ID that's not 'gateway', include it
-  const gatewayId = gateway.id && gateway.id !== 'gateway' ? ` ${gateway.id}` : '';
-  lines.push(`${i0}gateway${gatewayId} {`);
+  // New CellDL syntax: gateway ingress/egress "id" { }
+  const direction = gateway.direction || 'ingress';
+  const gatewayId = gateway.id && gateway.id !== 'gateway' ? ` "${gateway.id}"` : '';
+  lines.push(`${i0}gateway ${direction}${gatewayId} {`);
 
-  // Label property
-  if (gateway.label) {
-    lines.push(`${i1}label: "${escapeString(gateway.label)}"`);
+  // Protocol
+  if (gateway.protocol) {
+    lines.push(`${i1}protocol ${gateway.protocol}`);
   }
 
-  if (gateway.exposes.length > 0) {
-    lines.push(`${i1}exposes: [${gateway.exposes.join(', ')}]`);
+  // Port
+  if (gateway.port !== undefined) {
+    lines.push(`${i1}port ${gateway.port}`);
   }
 
-  if (gateway.policies && gateway.policies.length > 0) {
-    lines.push(`${i1}policies: [${gateway.policies.join(', ')}]`);
+  // Context path
+  if (gateway.context) {
+    lines.push(`${i1}context "${escapeString(gateway.context)}"`);
   }
 
+  // Target (for egress)
+  if (gateway.target) {
+    lines.push(`${i1}target "${escapeString(gateway.target)}"`);
+  }
+
+  // Policy (single for egress)
+  if (gateway.policy) {
+    lines.push(`${i1}policy ${gateway.policy}`);
+  }
+
+  // Auth
   if (gateway.auth) {
     if (gateway.auth.authType === 'local-sts') {
-      lines.push(`${i1}auth: local-sts`);
+      lines.push(`${i1}auth local-sts`);
     } else if (gateway.auth.reference) {
-      lines.push(`${i1}auth: federated(${gateway.auth.reference})`);
+      lines.push(`${i1}auth federated(${gateway.auth.reference})`);
     }
+  }
+
+  // Exposes (for ingress)
+  if (gateway.exposes.length > 0) {
+    lines.push(`${i1}exposes [${gateway.exposes.join(', ')}]`);
+  }
+
+  // Policies (multiple)
+  if (gateway.policies && gateway.policies.length > 0) {
+    lines.push(`${i1}policies [${gateway.policies.join(', ')}]`);
+  }
+
+  // Routes
+  for (const route of gateway.routes) {
+    lines.push(`${i1}route "${route.path}" -> ${route.target}`);
   }
 
   lines.push(`${i0}}`);
 
   return lines.join(lineEnding);
+}
+
+function stringifyComponentBlock(
+  comp: ComponentDefinition,
+  opts: Required<StringifyOptions>,
+  baseIndent: number
+): string {
+  const { indent, lineEnding } = opts;
+  const i0 = indent.repeat(baseIndent);
+  const i1 = indent.repeat(baseIndent + 1);
+  const lines: string[] = [];
+
+  // Determine block type based on component type
+  const blockType = getComponentBlockType(comp.componentType);
+  lines.push(`${i0}${blockType} "${comp.id}" {`);
+
+  // Source (Docker image)
+  if (comp.source) {
+    lines.push(`${i1}source "${escapeString(comp.source)}"`);
+  }
+
+  // Port
+  if (comp.port !== undefined) {
+    lines.push(`${i1}port ${comp.port}`);
+  }
+
+  // Database-specific fields
+  if (comp.engine) {
+    lines.push(`${i1}engine ${comp.engine}`);
+  }
+  if (comp.storage) {
+    lines.push(`${i1}storage ${comp.storage}`);
+  }
+  if (comp.version) {
+    lines.push(`${i1}version "${escapeString(comp.version)}"`);
+  }
+
+  // Environment variables
+  if (comp.env && comp.env.length > 0) {
+    lines.push(`${i1}env {`);
+    for (const envVar of comp.env) {
+      lines.push(`${indent.repeat(baseIndent + 2)}${envVar.key} = "${escapeString(envVar.value)}"`);
+    }
+    lines.push(`${i1}}`);
+  }
+
+  // Other attributes
+  const attrEntries = Object.entries(comp.attributes).filter(
+    ([key]) => !['tech', 'replicas'].includes(key) || comp.source === undefined
+  );
+  for (const [key, value] of attrEntries) {
+    lines.push(`${i1}${key} ${stringifyValue(value)}`);
+  }
+
+  // Sidecars
+  if (comp.sidecars && comp.sidecars.length > 0) {
+    lines.push(`${i1}sidecars [${comp.sidecars.join(', ')}]`);
+  }
+
+  lines.push(`${i0}}`);
+
+  return lines.join(lineEnding);
+}
+
+function getComponentBlockType(componentType: string): string {
+  switch (componentType) {
+    case 'database':
+      return 'database';
+    case 'function':
+      return 'function';
+    case 'legacy':
+      return 'legacy';
+    default:
+      return 'component';
+  }
 }
 
 function stringifyCluster(
@@ -218,18 +360,19 @@ function stringifyCluster(
   const i1 = indent.repeat(baseIndent + 1);
   const lines: string[] = [];
 
-  lines.push(`${i0}cluster ${cluster.id} {`);
+  lines.push(`${i0}cluster "${cluster.id}" {`);
 
   if (cluster.clusterType) {
-    lines.push(`${i1}type: ${cluster.clusterType}`);
+    lines.push(`${i1}type ${cluster.clusterType}`);
   }
 
   if (cluster.replicas !== undefined) {
-    lines.push(`${i1}replicas: ${cluster.replicas}`);
+    lines.push(`${i1}replicas ${cluster.replicas}`);
   }
 
   for (const comp of cluster.components) {
-    lines.push(`${i1}${stringifyComponent(comp)}`);
+    lines.push('');
+    lines.push(stringifyComponentBlock(comp, opts, baseIndent + 1));
   }
 
   lines.push(`${i0}}`);
@@ -237,9 +380,90 @@ function stringifyCluster(
   return lines.join(lineEnding);
 }
 
-function stringifyComponent(comp: ComponentDefinition): string {
-  const attrs = stringifyAttributes(comp.attributes, comp.sidecars);
-  return `${comp.componentType} ${comp.id}${attrs}`;
+function stringifyFlowDefinition(
+  flow: FlowDefinition,
+  opts: Required<StringifyOptions>,
+  baseIndent: number
+): string {
+  const { indent, lineEnding } = opts;
+  const i0 = indent.repeat(baseIndent);
+  const i1 = indent.repeat(baseIndent + 1);
+  const lines: string[] = [];
+
+  const flowName = flow.name ? ` "${escapeString(flow.name)}"` : '';
+  lines.push(`${i0}flow${flowName} {`);
+
+  // Group flows into chains where possible
+  const chains = groupFlowsIntoChains(flow.flows);
+  for (const chain of chains) {
+    const chainStr = chain.refs.join(' -> ');
+    const labelStr = chain.label ? ` : "${escapeString(chain.label)}"` : '';
+    lines.push(`${i1}${chainStr}${labelStr}`);
+  }
+
+  lines.push(`${i0}}`);
+
+  return lines.join(lineEnding);
+}
+
+interface FlowChain {
+  refs: string[];
+  label?: string | undefined;
+}
+
+function groupFlowsIntoChains(flows: FlowConnection[]): FlowChain[] {
+  if (flows.length === 0) return [];
+
+  const chains: FlowChain[] = [];
+  const used = new Set<number>();
+
+  for (let i = 0; i < flows.length; i++) {
+    if (used.has(i)) continue;
+
+    const chain: string[] = [flows[i]!.source, flows[i]!.destination];
+    let lastLabel = flows[i]!.label;
+    used.add(i);
+
+    // Try to extend the chain
+    let extended = true;
+    while (extended) {
+      extended = false;
+      for (let j = 0; j < flows.length; j++) {
+        if (used.has(j)) continue;
+        if (flows[j]!.source === chain[chain.length - 1]) {
+          chain.push(flows[j]!.destination);
+          lastLabel = flows[j]!.label;
+          used.add(j);
+          extended = true;
+          break;
+        }
+      }
+    }
+
+    chains.push({ refs: chain, label: lastLabel });
+  }
+
+  return chains;
+}
+
+function stringifyInternalConnections(
+  connections: InternalConnection[],
+  opts: Required<StringifyOptions>,
+  baseIndent: number
+): string {
+  const { indent, lineEnding } = opts;
+  const i0 = indent.repeat(baseIndent);
+  const i1 = indent.repeat(baseIndent + 1);
+  const lines: string[] = [];
+
+  lines.push(`${i0}flow {`);
+  for (const conn of connections) {
+    const labelStr = conn.label ? ` : "${escapeString(conn.label)}"` : '';
+    lines.push(`${i1}${conn.source} -> ${conn.target}${labelStr}`);
+  }
+  lines.push(`${i0}}`);
+
+  return lines.join(lineEnding);
 }
 
 function stringifyExternalDefinition(
@@ -252,16 +476,11 @@ function stringifyExternalDefinition(
   const i1 = indent.repeat(baseIndent + 1);
   const lines: string[] = [];
 
-  lines.push(`${i0}external ${ext.id} {`);
-
-  if (ext.label) {
-    lines.push(`${i1}label: "${escapeString(ext.label)}"`);
-  }
-
-  lines.push(`${i1}type: ${ext.externalType}`);
+  const label = ext.label ? `"${escapeString(ext.label)}"` : `"${ext.id}"`;
+  lines.push(`${i0}external ${label} type:${ext.externalType} {`);
 
   if (ext.provides && ext.provides.length > 0) {
-    lines.push(`${i1}provides: [${ext.provides.join(', ')}]`);
+    lines.push(`${i1}provides [${ext.provides.join(', ')}]`);
   }
 
   lines.push(`${i0}}`);
@@ -279,16 +498,11 @@ function stringifyUserDefinition(
   const i1 = indent.repeat(baseIndent + 1);
   const lines: string[] = [];
 
-  lines.push(`${i0}user ${user.id} {`);
-
-  if (user.label) {
-    lines.push(`${i1}label: "${escapeString(user.label)}"`);
-  }
-
-  lines.push(`${i1}type: ${user.userType}`);
+  const label = user.label ? `"${escapeString(user.label)}"` : `"${user.id}"`;
+  lines.push(`${i0}user ${label} type:${user.userType} {`);
 
   if (user.channels && user.channels.length > 0) {
-    lines.push(`${i1}channels: [${user.channels.join(', ')}]`);
+    lines.push(`${i1}channels [${user.channels.join(', ')}]`);
   }
 
   lines.push(`${i0}}`);
@@ -306,18 +520,15 @@ function stringifyApplicationDefinition(
   const i1 = indent.repeat(baseIndent + 1);
   const lines: string[] = [];
 
-  lines.push(`${i0}application ${app.id} {`);
-
-  if (app.label) {
-    lines.push(`${i1}label: "${escapeString(app.label)}"`);
-  }
+  const label = app.label ? `"${escapeString(app.label)}"` : `"${app.id}"`;
+  lines.push(`${i0}application ${label} {`);
 
   if (app.version) {
-    lines.push(`${i1}version: "${escapeString(app.version)}"`);
+    lines.push(`${i1}version "${escapeString(app.version)}"`);
   }
 
   if (app.cells.length > 0) {
-    lines.push(`${i1}cells: [${app.cells.join(', ')}]`);
+    lines.push(`${i1}cells [${app.cells.join(', ')}]`);
   }
 
   if (app.gateway) {
@@ -340,7 +551,8 @@ function stringifyConnectionsBlock(
   const i1 = indent.repeat(baseIndent + 1);
   const lines: string[] = [];
 
-  lines.push(`${i0}connections {`);
+  // Convert to flow block syntax
+  lines.push(`${i0}flow {`);
 
   for (const conn of block.connections) {
     lines.push(`${i1}${stringifyConnection(conn)}`);
@@ -352,11 +564,11 @@ function stringifyConnectionsBlock(
 }
 
 function stringifyConnection(conn: Connection): string {
-  const direction = conn.direction ? `${conn.direction} ` : '';
   const source = stringifyEndpoint(conn.source);
   const target = stringifyEndpoint(conn.target);
-  const attrs = stringifyAttributes(conn.attributes);
-  return `${direction}${source} -> ${target}${attrs}`;
+  const label = conn.attributes.label as string | undefined;
+  const labelStr = label ? ` : "${escapeString(label)}"` : '';
+  return `${source} -> ${target}${labelStr}`;
 }
 
 function stringifyEndpoint(ep: ConnectionEndpoint): string {
@@ -369,26 +581,6 @@ function stringifyEndpoint(ep: ConnectionEndpoint): string {
 // ============================================
 // Utility Functions
 // ============================================
-
-function stringifyAttributes(
-  attrs: Record<string, AttributeValue>,
-  sidecars?: string[]
-): string {
-  const entries = Object.entries(attrs);
-
-  // Add sidecars to attributes if present
-  if (sidecars && sidecars.length > 0) {
-    entries.push(['sidecar', sidecars]);
-  }
-
-  if (entries.length === 0) return '';
-
-  const parts = entries.map(([key, value]) => {
-    return `${key}: ${stringifyValue(value)}`;
-  });
-
-  return ` { ${parts.join(', ')} }`;
-}
 
 function stringifyValue(value: AttributeValue): string {
   if (typeof value === 'string') {

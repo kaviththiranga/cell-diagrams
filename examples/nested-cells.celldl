@@ -1,0 +1,125 @@
+// Nested Cells Architecture
+// Demonstrates composite cell structures with nested cells
+
+workspace "Banking Platform" {
+  version "1.0.0"
+  description "Banking platform with nested cell architecture"
+
+  user "Customer" type:external {
+    channels [web, mobile]
+  }
+
+  user "Banker" type:internal {
+    channels [web]
+  }
+
+  // Parent cell containing nested cells
+  cell "Core Banking" type:logic {
+    description "Core banking services"
+
+    gateway ingress "main-api" {
+      protocol https
+      port 443
+      context "/banking"
+
+      route "/accounts" -> account-service
+      route "/transactions" -> transaction-service
+    }
+
+    component "account-service" {
+      source "bank/account-service:v2.0"
+      port 8080
+    }
+
+    component "transaction-service" {
+      source "bank/transaction-service:v2.0"
+      port 8081
+    }
+
+    database "banking-db" {
+      engine postgresql
+      storage "1Ti"
+    }
+
+    // Nested cell for loan processing
+    cell "Loan Processing" type:logic {
+      description "Loan application and management"
+
+      gateway ingress {
+        protocol grpc
+        port 50051
+      }
+
+      component "loan-service" {
+        source "bank/loan-service:v1.5"
+        port 50051
+      }
+
+      component "credit-checker" {
+        source "bank/credit-checker:v1.0"
+        port 8080
+      }
+
+      database "loan-db" {
+        engine postgresql
+        storage "200Gi"
+      }
+
+      flow {
+        loan-service -> credit-checker
+        loan-service -> loan-db
+      }
+    }
+
+    // Nested cell for card services
+    cell "Card Services" type:logic {
+      description "Credit and debit card management"
+
+      gateway ingress {
+        protocol https
+        port 8443
+      }
+
+      component "card-service" {
+        source "bank/card-service:v1.2"
+        port 8080
+      }
+
+      database "card-db" {
+        engine postgresql
+        storage "100Gi"
+      }
+
+      flow {
+        card-service -> card-db
+      }
+    }
+
+    flow {
+      account-service -> banking-db
+      transaction-service -> banking-db
+      account-service -> Loan Processing
+      account-service -> Card Services
+    }
+  }
+
+  // External integrations
+  external "Credit Bureau" type:partner {
+    provides [api]
+  }
+
+  external "Payment Network" type:saas {
+    provides [api]
+  }
+
+  // Inter-system flows
+  flow "customer-journey" {
+    Customer -> Core Banking : "banking operations"
+    Banker -> Core Banking : "account management"
+  }
+
+  flow "external-integrations" {
+    Core Banking -> Credit Bureau : "credit check"
+    Core Banking -> Payment Network : "card transactions"
+  }
+}

@@ -1,8 +1,8 @@
 /**
- * Cell Diagrams Lexer
+ * CellDL Lexer
  *
- * Tokenizes Cell Diagrams DSL source code using Chevrotain.
- * Complete rewrite for Cell-Based Architecture DSL.
+ * Tokenizes CellDL (Cell Definition Language) source code using Chevrotain.
+ * Based on the CellDL specification for Cell-Based Architecture DSL.
  *
  * IMPORTANT: Uses longer_alt to handle tokens that are prefixes of other tokens.
  */
@@ -36,6 +36,7 @@ export const BlockComment = createToken({
 // ============================================
 
 export const Arrow = createToken({ name: 'Arrow', pattern: /->/ });
+export const Equals = createToken({ name: 'Equals', pattern: /=/ });
 export const Dot = createToken({ name: 'Dot', pattern: /\./ });
 export const LBrace = createToken({ name: 'LBrace', pattern: /\{/ });
 export const RBrace = createToken({ name: 'RBrace', pattern: /\}/ });
@@ -59,58 +60,103 @@ export const Identifier = createToken({
 // Keywords that have longer versions (must define longer ones first)
 // ============================================
 
-// Define tokens that have prefix relationships
-// The longer_alt is used to specify: if I match, check this longer alternative first
-
-// "cells" vs "cell" - cells is longer
-export const Cells = createToken({
-  name: 'Cells',
-  pattern: /cells/,
-  longer_alt: Identifier, // cells could be start of identifier like "cellsData"
+// "workspace" vs "work"
+export const Workspace = createToken({
+  name: 'Workspace',
+  pattern: /workspace/i,
+  longer_alt: Identifier,
 });
 
-export const Cell = createToken({
-  name: 'Cell',
-  pattern: /cell/,
-  longer_alt: Identifier, // cell could be start of identifier
+// "description" vs "desc"
+export const Description = createToken({
+  name: 'Description',
+  pattern: /description/i,
+  longer_alt: Identifier,
+});
+
+// "property" vs "prop"
+export const Property = createToken({
+  name: 'Property',
+  pattern: /property/i,
+  longer_alt: Identifier,
+});
+
+// "destination" must come before other tokens
+export const Destination = createToken({
+  name: 'Destination',
+  pattern: /destination/i,
+  longer_alt: Identifier,
 });
 
 // "userstore" vs "user"
 export const Userstore = createToken({
   name: 'Userstore',
-  pattern: /userstore/,
+  pattern: /userstore/i,
   longer_alt: Identifier,
 });
 
 export const User = createToken({
   name: 'User',
-  pattern: /user/,
-  longer_alt: Identifier,
-});
-
-// "channels" vs "channel"
-export const Channels = createToken({
-  name: 'Channels',
-  pattern: /channels/,
-  longer_alt: Identifier,
-});
-
-export const Channel = createToken({
-  name: 'Channel',
-  pattern: /channel/,
+  pattern: /user/i,
   longer_alt: Identifier,
 });
 
 // "database" vs "data"
 export const Database = createToken({
   name: 'Database',
-  pattern: /database/,
+  pattern: /database/i,
   longer_alt: Identifier,
 });
 
 export const Data = createToken({
   name: 'Data',
-  pattern: /data/,
+  pattern: /data/i,
+  longer_alt: Identifier,
+});
+
+// "components" vs "component"
+export const Components = createToken({
+  name: 'Components',
+  pattern: /components/i,
+  longer_alt: Identifier,
+});
+
+export const Component = createToken({
+  name: 'Component',
+  pattern: /component/i,
+  longer_alt: Identifier,
+});
+
+// "cells" vs "cell"
+export const Cells = createToken({
+  name: 'Cells',
+  pattern: /cells/i,
+  longer_alt: Identifier,
+});
+
+export const Cell = createToken({
+  name: 'Cell',
+  pattern: /cell/i,
+  longer_alt: Identifier,
+});
+
+// "channels" vs "channel"
+export const Channels = createToken({
+  name: 'Channels',
+  pattern: /channels/i,
+  longer_alt: Identifier,
+});
+
+export const Channel = createToken({
+  name: 'Channel',
+  pattern: /channel/i,
+  longer_alt: Identifier,
+});
+
+// "connections" vs "connect"
+export const Connections = createToken({
+  name: 'Connections',
+  pattern: /connections/i,
   longer_alt: Identifier,
 });
 
@@ -118,121 +164,148 @@ export const Data = createToken({
 // Top-Level Keywords
 // ============================================
 
-export const Diagram = createToken({ name: 'Diagram', pattern: /diagram/, longer_alt: Identifier });
-export const External = createToken({ name: 'External', pattern: /external/, longer_alt: Identifier });
-export const Application = createToken({ name: 'Application', pattern: /application/, longer_alt: Identifier });
-export const Connections = createToken({ name: 'Connections', pattern: /connections/, longer_alt: Identifier });
+export const Diagram = createToken({ name: 'Diagram', pattern: /diagram/i, longer_alt: Identifier });
+export const External = createToken({ name: 'External', pattern: /external/i, longer_alt: Identifier });
+export const Application = createToken({ name: 'Application', pattern: /application/i, longer_alt: Identifier });
+export const Flow = createToken({ name: 'Flow', pattern: /flow/i, longer_alt: Identifier });
 
 // ============================================
 // Cell & Gateway Keywords
 // ============================================
 
-export const Label = createToken({ name: 'Label', pattern: /label/, longer_alt: Identifier });
-export const Type = createToken({ name: 'Type', pattern: /type/, longer_alt: Identifier });
-export const Gateway = createToken({ name: 'Gateway', pattern: /gateway/, longer_alt: Identifier });
-export const Components = createToken({ name: 'Components', pattern: /components/, longer_alt: Identifier });
-export const Cluster = createToken({ name: 'Cluster', pattern: /cluster/, longer_alt: Identifier });
-export const Exposes = createToken({ name: 'Exposes', pattern: /exposes/, longer_alt: Identifier });
-export const Policies = createToken({ name: 'Policies', pattern: /policies/, longer_alt: Identifier });
-export const Auth = createToken({ name: 'Auth', pattern: /auth/, longer_alt: Identifier });
-export const Federated = createToken({ name: 'Federated', pattern: /federated/, longer_alt: Identifier });
-export const LocalSts = createToken({ name: 'LocalSts', pattern: /local-sts/ });
+export const Label = createToken({ name: 'Label', pattern: /label/i, longer_alt: Identifier });
+export const Type = createToken({ name: 'Type', pattern: /type/i, longer_alt: Identifier });
+export const Gateway = createToken({ name: 'Gateway', pattern: /gateway/i, longer_alt: Identifier });
+export const Ingress = createToken({ name: 'Ingress', pattern: /ingress/i, longer_alt: Identifier });
+export const Egress = createToken({ name: 'Egress', pattern: /egress/i, longer_alt: Identifier });
+export const Cluster = createToken({ name: 'Cluster', pattern: /cluster/i, longer_alt: Identifier });
+export const Exposes = createToken({ name: 'Exposes', pattern: /exposes/i, longer_alt: Identifier });
+export const Policies = createToken({ name: 'Policies', pattern: /policies/i, longer_alt: Identifier });
+export const Auth = createToken({ name: 'Auth', pattern: /auth/i, longer_alt: Identifier });
+export const Federated = createToken({ name: 'Federated', pattern: /federated/i, longer_alt: Identifier });
+export const LocalSts = createToken({ name: 'LocalSts', pattern: /local-sts/i });
+// Routes must come before Route so "routes" doesn't get tokenized as "route" + "s"
+export const Routes = createToken({ name: 'Routes', pattern: /routes/i, longer_alt: Identifier });
+export const Route = createToken({ name: 'Route', pattern: /route/i, longer_alt: Routes });
+export const Context = createToken({ name: 'Context', pattern: /context/i, longer_alt: Identifier });
 
 // ============================================
 // Cell Types
 // ============================================
 
-export const Logic = createToken({ name: 'Logic', pattern: /logic/, longer_alt: Identifier });
-export const Integration = createToken({ name: 'Integration', pattern: /integration/, longer_alt: Identifier });
-export const Security = createToken({ name: 'Security', pattern: /security/, longer_alt: Identifier });
-export const LegacyType = createToken({ name: 'LegacyType', pattern: /legacy/, longer_alt: Identifier });
+export const Logic = createToken({ name: 'Logic', pattern: /logic/i, longer_alt: Identifier });
+export const Integration = createToken({ name: 'Integration', pattern: /integration/i, longer_alt: Identifier });
+export const Security = createToken({ name: 'Security', pattern: /security/i, longer_alt: Identifier });
+export const LegacyType = createToken({ name: 'LegacyType', pattern: /legacy/i, longer_alt: Identifier });
 
 // ============================================
 // Component Types (Full Names)
 // ============================================
 
-export const Microservice = createToken({ name: 'Microservice', pattern: /microservice/, longer_alt: Identifier });
-export const Function = createToken({ name: 'Function', pattern: /function/, longer_alt: Identifier });
-export const Broker = createToken({ name: 'Broker', pattern: /broker/, longer_alt: Identifier });
-export const Cache = createToken({ name: 'Cache', pattern: /cache/, longer_alt: Identifier });
+export const Microservice = createToken({ name: 'Microservice', pattern: /microservice/i, longer_alt: Identifier });
+export const Function = createToken({ name: 'Function', pattern: /function/i, longer_alt: Identifier });
+export const Broker = createToken({ name: 'Broker', pattern: /broker/i, longer_alt: Identifier });
+export const Cache = createToken({ name: 'Cache', pattern: /cache/i, longer_alt: Identifier });
 
 // Security Component Types
-export const Idp = createToken({ name: 'Idp', pattern: /idp/, longer_alt: Identifier });
-export const Sts = createToken({ name: 'Sts', pattern: /sts/, longer_alt: Identifier });
+export const Idp = createToken({ name: 'Idp', pattern: /idp/i, longer_alt: Identifier });
+export const Sts = createToken({ name: 'Sts', pattern: /sts/i, longer_alt: Identifier });
 
 // Integration Component Types
-export const Esb = createToken({ name: 'Esb', pattern: /esb/, longer_alt: Identifier });
-export const Adapter = createToken({ name: 'Adapter', pattern: /adapter/, longer_alt: Identifier });
-export const Transformer = createToken({ name: 'Transformer', pattern: /transformer/, longer_alt: Identifier });
+export const Esb = createToken({ name: 'Esb', pattern: /esb/i, longer_alt: Identifier });
+export const Adapter = createToken({ name: 'Adapter', pattern: /adapter/i, longer_alt: Identifier });
+export const Transformer = createToken({ name: 'Transformer', pattern: /transformer/i, longer_alt: Identifier });
 
 // Frontend Component Types
-export const Webapp = createToken({ name: 'Webapp', pattern: /webapp/, longer_alt: Identifier });
-export const Mobile = createToken({ name: 'Mobile', pattern: /mobile/, longer_alt: Identifier });
-export const Iot = createToken({ name: 'Iot', pattern: /iot/, longer_alt: Identifier });
+export const Webapp = createToken({ name: 'Webapp', pattern: /webapp/i, longer_alt: Identifier });
+export const Mobile = createToken({ name: 'Mobile', pattern: /mobile/i, longer_alt: Identifier });
+export const Iot = createToken({ name: 'Iot', pattern: /iot/i, longer_alt: Identifier });
 
 // Component Type Aliases (Short Forms)
-export const Ms = createToken({ name: 'Ms', pattern: /ms/, longer_alt: Identifier });
-export const Fn = createToken({ name: 'Fn', pattern: /fn/, longer_alt: Identifier });
-export const Db = createToken({ name: 'Db', pattern: /db/, longer_alt: Identifier });
+export const Ms = createToken({ name: 'Ms', pattern: /ms/i, longer_alt: Identifier });
+export const Fn = createToken({ name: 'Fn', pattern: /fn/i, longer_alt: Identifier });
+export const Db = createToken({ name: 'Db', pattern: /db/i, longer_alt: Identifier });
+
+// ============================================
+// Component Properties
+// ============================================
+
+export const Source = createToken({ name: 'Source', pattern: /source/i, longer_alt: Identifier });
+export const Port = createToken({ name: 'Port', pattern: /port/i, longer_alt: Identifier });
+export const Env = createToken({ name: 'Env', pattern: /env/i, longer_alt: Identifier });
+export const Engine = createToken({ name: 'Engine', pattern: /engine/i, longer_alt: Identifier });
+export const Storage = createToken({ name: 'Storage', pattern: /storage/i, longer_alt: Identifier });
+export const Target = createToken({ name: 'Target', pattern: /target/i, longer_alt: Identifier });
+export const Policy = createToken({ name: 'Policy', pattern: /policy/i, longer_alt: Identifier });
 
 // ============================================
 // Connection Direction Keywords
 // ============================================
 
-export const Northbound = createToken({ name: 'Northbound', pattern: /northbound/, longer_alt: Identifier });
-export const Southbound = createToken({ name: 'Southbound', pattern: /southbound/, longer_alt: Identifier });
-export const Eastbound = createToken({ name: 'Eastbound', pattern: /eastbound/, longer_alt: Identifier });
-export const Westbound = createToken({ name: 'Westbound', pattern: /westbound/, longer_alt: Identifier });
+export const Northbound = createToken({ name: 'Northbound', pattern: /northbound/i, longer_alt: Identifier });
+export const Southbound = createToken({ name: 'Southbound', pattern: /southbound/i, longer_alt: Identifier });
+export const Eastbound = createToken({ name: 'Eastbound', pattern: /eastbound/i, longer_alt: Identifier });
+export const Westbound = createToken({ name: 'Westbound', pattern: /westbound/i, longer_alt: Identifier });
 
 // ============================================
 // Endpoint Types
 // ============================================
 
-export const Api = createToken({ name: 'Api', pattern: /api/, longer_alt: Identifier });
-export const Events = createToken({ name: 'Events', pattern: /events/, longer_alt: Identifier });
-export const Stream = createToken({ name: 'Stream', pattern: /stream/, longer_alt: Identifier });
+export const Api = createToken({ name: 'Api', pattern: /api/i, longer_alt: Identifier });
+export const Events = createToken({ name: 'Events', pattern: /events/i, longer_alt: Identifier });
+export const Stream = createToken({ name: 'Stream', pattern: /stream/i, longer_alt: Identifier });
+
+// ============================================
+// Protocol Keywords
+// ============================================
+
+export const Https = createToken({ name: 'Https', pattern: /https/i, longer_alt: Identifier });
+export const Http = createToken({ name: 'Http', pattern: /http/i, longer_alt: Identifier });
+export const Grpc = createToken({ name: 'Grpc', pattern: /grpc/i, longer_alt: Identifier });
+export const Tcp = createToken({ name: 'Tcp', pattern: /tcp/i, longer_alt: Identifier });
+export const Mtls = createToken({ name: 'Mtls', pattern: /mtls/i, longer_alt: Identifier });
+export const Kafka = createToken({ name: 'Kafka', pattern: /kafka/i, longer_alt: Identifier });
 
 // ============================================
 // External/User Property Keywords
 // ============================================
 
-export const Provides = createToken({ name: 'Provides', pattern: /provides/, longer_alt: Identifier });
+export const Provides = createToken({ name: 'Provides', pattern: /provides/i, longer_alt: Identifier });
 
 // ============================================
 // External Types
 // ============================================
 
-export const Saas = createToken({ name: 'Saas', pattern: /saas/, longer_alt: Identifier });
-export const Partner = createToken({ name: 'Partner', pattern: /partner/, longer_alt: Identifier });
-export const Enterprise = createToken({ name: 'Enterprise', pattern: /enterprise/, longer_alt: Identifier });
+export const Saas = createToken({ name: 'Saas', pattern: /saas/i, longer_alt: Identifier });
+export const Partner = createToken({ name: 'Partner', pattern: /partner/i, longer_alt: Identifier });
+export const Enterprise = createToken({ name: 'Enterprise', pattern: /enterprise/i, longer_alt: Identifier });
 
 // ============================================
 // User Types
 // ============================================
 
-export const Internal = createToken({ name: 'Internal', pattern: /internal/, longer_alt: Identifier });
-export const System = createToken({ name: 'System', pattern: /system/, longer_alt: Identifier });
+export const Internal = createToken({ name: 'Internal', pattern: /internal/i, longer_alt: Identifier });
+export const System = createToken({ name: 'System', pattern: /system/i, longer_alt: Identifier });
 
 // ============================================
 // Attribute Keywords
 // ============================================
 
-export const Tech = createToken({ name: 'Tech', pattern: /tech/, longer_alt: Identifier });
-export const Replicas = createToken({ name: 'Replicas', pattern: /replicas/, longer_alt: Identifier });
-export const Role = createToken({ name: 'Role', pattern: /role/, longer_alt: Identifier });
-export const Sidecar = createToken({ name: 'Sidecar', pattern: /sidecar/, longer_alt: Identifier });
-export const Provider = createToken({ name: 'Provider', pattern: /provider/, longer_alt: Identifier });
-export const Protocol = createToken({ name: 'Protocol', pattern: /protocol/, longer_alt: Identifier });
-export const Via = createToken({ name: 'Via', pattern: /via/, longer_alt: Identifier });
-export const Version = createToken({ name: 'Version', pattern: /version/, longer_alt: Identifier });
-export const Routes = createToken({ name: 'Routes', pattern: /routes/, longer_alt: Identifier });
+export const Tech = createToken({ name: 'Tech', pattern: /tech/i, longer_alt: Identifier });
+export const Replicas = createToken({ name: 'Replicas', pattern: /replicas/i, longer_alt: Identifier });
+export const Role = createToken({ name: 'Role', pattern: /role/i, longer_alt: Identifier });
+export const Sidecar = createToken({ name: 'Sidecar', pattern: /sidecar/i, longer_alt: Identifier });
+export const Provider = createToken({ name: 'Provider', pattern: /provider/i, longer_alt: Identifier });
+export const Protocol = createToken({ name: 'Protocol', pattern: /protocol/i, longer_alt: Identifier });
+export const Via = createToken({ name: 'Via', pattern: /via/i, longer_alt: Identifier });
+export const Version = createToken({ name: 'Version', pattern: /version/i, longer_alt: Identifier });
 
 // ============================================
 // Boolean Literals
 // ============================================
 
-export const True = createToken({ name: 'True', pattern: /true/, longer_alt: Identifier });
-export const False = createToken({ name: 'False', pattern: /false/, longer_alt: Identifier });
+export const True = createToken({ name: 'True', pattern: /true/i, longer_alt: Identifier });
+export const False = createToken({ name: 'False', pattern: /false/i, longer_alt: Identifier });
 
 // ============================================
 // Other Literals
@@ -283,28 +356,36 @@ export const externalTypeTokens: TokenType[] = [Saas, Partner, Enterprise];
 /** User type tokens */
 export const userTypeTokens: TokenType[] = [External, Internal, System];
 
+/** Protocol tokens */
+export const protocolTokens: TokenType[] = [Https, Http, Grpc, Tcp, Mtls, Kafka];
+
 /** All keyword tokens (for syntax highlighting) */
 export const keywordTokens: TokenType[] = [
   // Top-level
-  Diagram, Cell, External, User, Application, Connections,
+  Workspace, Diagram, Cell, External, User, Application, Connections, Flow,
   // Cell/Gateway properties
-  Label, Type, Gateway, Components, Cluster,
-  Exposes, Policies, Auth, Federated, LocalSts,
+  Label, Type, Gateway, Ingress, Egress, Components, Component, Cluster,
+  Exposes, Policies, Auth, Federated, LocalSts, Route, Context,
+  Description, Property,
   // Cell types
   ...cellTypeTokens,
   // Component types
   ...componentTypeTokens,
   ...componentTypeAliasTokens,
+  // Component properties
+  Source, Port, Env, Engine, Storage, Target, Policy,
   // Directions
   ...directionTokens,
   // Endpoint types
   ...endpointTypeTokens,
+  // Protocols
+  ...protocolTokens,
   // External/User
   Provides, Channels,
   ...externalTypeTokens,
   Internal, System,
   // Attributes
-  Tech, Replicas, Role, Sidecar, Provider, Protocol, Via, Version, Cells, Routes,
+  Tech, Replicas, Role, Sidecar, Provider, Protocol, Via, Version, Cells,
   // Booleans
   True, False,
 ];
@@ -329,28 +410,42 @@ export const allTokens: TokenType[] = [
   LocalSts, // Must be before Identifier (contains hyphen)
 
   // Longer tokens must come BEFORE shorter prefix tokens
+  // workspace, description, property, destination first
+  Workspace,
+  Description,
+  Destination,
+  Property,
+
   // cells before cell, userstore before user, channels before channel, database before data
+  // components before component, connections
   Cells,
   Userstore,
   Channels,
   Database,
+  Components,
+  Connections,
 
   // Top-level keywords
   Application,
-  Connections,
   Diagram,
   External,
   Cell,
   User,
+  Flow,
 
   // Cell/Gateway properties
-  Components,
+  Component,
   Federated,
   Policies,
   Exposes,
   Gateway,
+  Ingress,
+  Egress,
   Cluster,
+  Context,
   Label,
+  Routes, // Must come before Route
+  Route,
   Auth,
   Type,
 
@@ -381,6 +476,15 @@ export const allTokens: TokenType[] = [
   Fn,
   Db,
 
+  // Component properties
+  Storage,
+  Engine,
+  Source,
+  Target,
+  Policy,
+  Port,
+  Env,
+
   // Connection directions
   Northbound,
   Southbound,
@@ -391,6 +495,14 @@ export const allTokens: TokenType[] = [
   Events,
   Stream,
   Api,
+
+  // Protocol types (longer first)
+  Https,
+  Http,
+  Grpc,
+  Mtls,
+  Kafka,
+  Tcp,
 
   // External/User properties
   Provides,
@@ -410,7 +522,6 @@ export const allTokens: TokenType[] = [
   Provider,
   Sidecar,
   Version,
-  Routes,
   Tech,
   Role,
   Via,
@@ -427,6 +538,7 @@ export const allTokens: TokenType[] = [
   Identifier,
 
   // Single-character delimiters (lowest priority)
+  Equals,
   LBrace,
   RBrace,
   LBracket,
@@ -443,13 +555,16 @@ export const allTokens: TokenType[] = [
 // ============================================
 
 /**
- * The Cell Diagrams lexer instance.
- * Use CellDiagramsLexer.tokenize(source) to tokenize source code.
+ * The CellDL lexer instance.
+ * Use CellDLLexer.tokenize(source) to tokenize source code.
  */
 export const CellDiagramsLexer = new Lexer(allTokens, {
   ensureOptimizations: true,
   positionTracking: 'full',
 });
+
+// Alias for CellDL naming
+export const CellDLLexer = CellDiagramsLexer;
 
 // ============================================
 // Lexer Utilities

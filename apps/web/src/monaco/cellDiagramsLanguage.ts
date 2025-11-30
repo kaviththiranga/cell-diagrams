@@ -1,11 +1,13 @@
 /**
- * Monaco Editor Language Configuration for Cell Diagrams DSL
+ * Monaco Editor Language Configuration for CellDL (Cell Definition Language)
  *
- * Updated for Cell-Based Architecture DSL with support for:
- * - Cells with gateway, components, clusters
- * - Virtual applications
- * - External systems and users
- * - Connection directions (N/S/E/W)
+ * Updated for new CellDL syntax with support for:
+ * - Workspace root block
+ * - Cells with multiple gateways (ingress/egress)
+ * - Flow definitions for traffic patterns
+ * - Route definitions inside gateways
+ * - Component blocks with env variables
+ * - Nested cells
  */
 
 import type * as Monaco from 'monaco-editor';
@@ -13,7 +15,7 @@ import type * as Monaco from 'monaco-editor';
 export const LANGUAGE_ID = 'cell-diagrams';
 
 /**
- * Language configuration for Cell Diagrams
+ * Language configuration for CellDL
  */
 export const languageConfiguration: Monaco.languages.LanguageConfiguration = {
   comments: {
@@ -46,25 +48,27 @@ export const languageConfiguration: Monaco.languages.LanguageConfiguration = {
 };
 
 /**
- * Monarch tokenizer for Cell Diagrams syntax highlighting
+ * Monarch tokenizer for CellDL syntax highlighting
  */
 export const monarchTokensProvider: Monaco.languages.IMonarchLanguage = {
   defaultToken: 'invalid',
 
   // Top-level keywords
-  topLevelKeywords: ['diagram', 'cell', 'external', 'user', 'application', 'connections'],
+  topLevelKeywords: ['workspace', 'cell', 'external', 'user', 'application', 'flow'],
 
-  // Cell/Gateway property keywords
+  // Block keywords
+  blockKeywords: ['gateway', 'component', 'database', 'function', 'legacy', 'cluster', 'env'],
+
+  // Property keywords
   propertyKeywords: [
-    'label', 'type', 'gateway', 'components', 'cluster',
+    'version', 'description', 'property', 'replicas',
+    'protocol', 'port', 'context', 'target', 'policy',
     'exposes', 'policies', 'auth', 'federated', 'local-sts',
-    'provides', 'channels', 'version', 'cells', 'routes',
+    'provides', 'channels', 'cells', 'route', 'source', 'engine', 'storage',
   ],
 
-  // Attribute keywords
-  attributeKeywords: [
-    'tech', 'replicas', 'role', 'sidecar', 'provider', 'protocol', 'via',
-  ],
+  // Gateway direction keywords
+  directionKeywords: ['ingress', 'egress'],
 
   // Cell types
   cellTypes: ['logic', 'integration', 'data', 'security', 'channel', 'legacy'],
@@ -80,8 +84,11 @@ export const monarchTokensProvider: Monaco.languages.IMonarchLanguage = {
     'ms', 'fn', 'db',
   ],
 
+  // Protocol keywords
+  protocolKeywords: ['https', 'http', 'grpc', 'tcp', 'mtls', 'kafka'],
+
   // Connection direction keywords
-  directions: ['northbound', 'southbound', 'eastbound', 'westbound'],
+  connectionDirections: ['northbound', 'southbound', 'eastbound', 'westbound'],
 
   // Endpoint types
   endpointTypes: ['api', 'events', 'stream'],
@@ -92,7 +99,7 @@ export const monarchTokensProvider: Monaco.languages.IMonarchLanguage = {
   // User types
   userTypes: ['external', 'internal', 'system'],
 
-  operators: ['->'],
+  operators: ['->', '='],
 
   symbols: /[=><!~?:&|+\-*\/\^%]+/,
 
@@ -106,28 +113,40 @@ export const monarchTokensProvider: Monaco.languages.IMonarchLanguage = {
 
       // Top-level keywords
       [
-        /\b(diagram|cell|external|user|application|connections)\b/,
+        /\b(workspace|cell|external|user|application|flow)\b/,
         'keyword',
       ],
 
+      // Block keywords
+      [
+        /\b(gateway|component|database|function|cluster|env)\b/,
+        'keyword.block',
+      ],
+
+      // Gateway direction keywords
+      [/\b(ingress|egress)\b/, 'keyword.direction'],
+
       // Property keywords
       [
-        /\b(label|type|gateway|components|cluster|exposes|policies|auth|federated|provides|channels|version|cells|routes)\b/,
+        /\b(version|description|property|replicas|protocol|port|context|target|policy|exposes|policies|auth|federated|provides|channels|cells|route|source|engine|storage)\b/,
         'keyword.property',
       ],
 
       // local-sts (special case with hyphen)
       [/\blocal-sts\b/, 'keyword.property'],
 
-      // Attribute keywords
-      [/\b(tech|replicas|role|sidecar|provider|protocol|via)\b/, 'keyword.attribute'],
+      // Protocol keywords
+      [/\b(https|http|grpc|tcp|mtls|kafka)\b/, 'type.protocol'],
+
+      // Type prefix (type:)
+      [/\btype:/, 'keyword.property'],
 
       // Cell types
       [/\b(logic|integration|data|security|channel)\b/, 'type.cell'],
 
       // Component types (full names)
       [
-        /\b(microservice|function|database|broker|cache|gateway|idp|sts|userstore|esb|adapter|transformer|webapp|mobile|iot)\b/,
+        /\b(microservice|broker|cache|idp|sts|userstore|esb|adapter|transformer|webapp|mobile|iot)\b/,
         'type.component',
       ],
 
@@ -164,6 +183,7 @@ export const monarchTokensProvider: Monaco.languages.IMonarchLanguage = {
 
       // Operators
       [/->/, 'operator.arrow'],
+      [/=/, 'operator.equals'],
 
       // Delimiters
       [/[{}]/, 'delimiter.bracket'],
@@ -193,19 +213,21 @@ export const monarchTokensProvider: Monaco.languages.IMonarchLanguage = {
 };
 
 /**
- * Theme colors for Cell Diagrams
+ * Theme colors for CellDL
  */
 export const themeRules: Monaco.editor.ITokenThemeRule[] = [
   // Keywords
   { token: 'keyword', foreground: 'c586c0', fontStyle: 'bold' },
+  { token: 'keyword.block', foreground: 'c586c0' },
+  { token: 'keyword.direction', foreground: 'dcdcaa', fontStyle: 'bold' },
   { token: 'keyword.property', foreground: '9cdcfe' },
-  { token: 'keyword.attribute', foreground: '9cdcfe', fontStyle: 'italic' },
   { token: 'keyword.boolean', foreground: '569cd6' },
 
   // Types
   { token: 'type.cell', foreground: 'dcdcaa', fontStyle: 'bold' },
   { token: 'type.component', foreground: '4ec9b0' },
   { token: 'type.component.short', foreground: '4ec9b0', fontStyle: 'italic' },
+  { token: 'type.protocol', foreground: '4fc1ff' },
   { token: 'type.direction', foreground: 'ce9178', fontStyle: 'bold' },
   { token: 'type.endpoint', foreground: 'ce9178' },
   { token: 'type.external', foreground: '6a9955' },
@@ -219,19 +241,20 @@ export const themeRules: Monaco.editor.ITokenThemeRule[] = [
   { token: 'string.escape', foreground: 'd7ba7d' },
   { token: 'comment', foreground: '6a9955', fontStyle: 'italic' },
   { token: 'operator.arrow', foreground: 'd4d4d4', fontStyle: 'bold' },
+  { token: 'operator.equals', foreground: 'd4d4d4' },
   { token: 'delimiter', foreground: 'd4d4d4' },
 ];
 
 /**
- * Register the Cell Diagrams language with Monaco
+ * Register the CellDL language with Monaco
  */
 export function registerCellDiagramsLanguage(monaco: typeof Monaco): void {
   // Register the language
   monaco.languages.register({
     id: LANGUAGE_ID,
-    extensions: ['.cell'],
-    aliases: ['Cell Diagrams', 'cell-diagrams', 'cell'],
-    mimetypes: ['text/x-cell-diagrams'],
+    extensions: ['.cell', '.celldl'],
+    aliases: ['CellDL', 'Cell Diagrams', 'cell-diagrams', 'cell'],
+    mimetypes: ['text/x-cell-diagrams', 'text/x-celldl'],
   });
 
   // Set language configuration
@@ -240,7 +263,7 @@ export function registerCellDiagramsLanguage(monaco: typeof Monaco): void {
   // Set monarch tokens provider for syntax highlighting
   monaco.languages.setMonarchTokensProvider(LANGUAGE_ID, monarchTokensProvider);
 
-  // Define custom theme for Cell Diagrams
+  // Define custom theme for CellDL
   monaco.editor.defineTheme('cell-diagrams-dark', {
     base: 'vs-dark',
     inherit: true,
@@ -250,230 +273,182 @@ export function registerCellDiagramsLanguage(monaco: typeof Monaco): void {
 }
 
 /**
- * Default Cell Diagrams sample code (Cell-Based Architecture)
- * Tests three-zone layout: Header (northbound) -> Middle (cells) -> Bottom (southbound)
+ * Default CellDL sample code demonstrating the new syntax
  */
-export const defaultSampleCode = `// Cell-Based Architecture Example
-// Testing Three-Zone Layout with Multiple Cells and External Services
+export const defaultSampleCode = `// CellDL (Cell Definition Language) Example
+// E-Commerce Platform Architecture
 
-diagram ECommerceSystem {
+workspace "E-Commerce Platform" {
+  version "1.0.0"
+  description "Modern e-commerce system using Cell-Based Architecture"
 
   // ============================================
-  // HEADER ZONE: Users and northbound externals
+  // Users
   // ============================================
 
-  // Users accessing the system
-  user WebUser {
-    type: external
+  user "Web Customer" type:external {
+    channels [web, mobile]
   }
 
-  user MobileUser {
-    type: external
-  }
-
-  user AdminUser {
-    type: internal
-  }
-
-  // Frontend applications (connect northbound to cells)
-  external WebApp {
-    label: "Web Application"
-    type: enterprise
-    provides: [api]
-  }
-
-  external MobileApp {
-    label: "Mobile App"
-    type: enterprise
-    provides: [api]
-  }
-
-  external AdminPortal {
-    label: "Admin Portal"
-    type: enterprise
-    provides: [api]
+  user "Admin" type:internal {
+    channels [web]
   }
 
   // ============================================
-  // MIDDLE ZONE: Cells arranged horizontally
-  // ============================================
-
   // User Management Cell
-  cell UserCell {
-    label: "User Management"
-    type: logic
+  // ============================================
 
-    gateway {
-      label: "User API Gateway"
-      exposes: [api]
+  cell "User Management" type:logic {
+    description "Handles user authentication and profiles"
+
+    gateway ingress {
+      protocol https
+      port 443
+      context "/users"
+      auth local-sts
+
+      route "/login" -> auth-service
+      route "/profile" -> profile-service
+      route "/register" -> auth-service
     }
 
-    components {
-      microservice AuthService
-      microservice ProfileService
-      database UserDB [tech: "PostgreSQL"]
-      cache SessionCache [tech: "Redis"]
+    component "auth-service" {
+      source "company/auth-service:latest"
+      port 8080
+      env {
+        JWT_SECRET = "secret"
+        TOKEN_EXPIRY = "3600"
+      }
     }
 
-    connections {
-      AuthService -> UserDB
-      AuthService -> SessionCache
-      ProfileService -> UserDB
+    component "profile-service" {
+      source "company/profile-service:latest"
+      port 8081
+    }
+
+    database "user-db" {
+      engine postgresql
+      storage "100Gi"
+      version "15.0"
+    }
+
+    flow {
+      auth-service -> user-db
+      profile-service -> user-db
     }
   }
 
+  // ============================================
   // Product Catalog Cell
-  cell ProductCell {
-    label: "Product Catalog"
-    type: logic
+  // ============================================
 
-    gateway {
-      label: "Product API Gateway"
-      exposes: [api]
+  cell "Product Catalog" type:logic {
+    description "Product catalog and search"
+
+    gateway ingress {
+      protocol https
+      port 443
+      context "/products"
+
+      route "/search" -> search-service
+      route "/catalog" -> catalog-service
     }
 
-    components {
-      microservice CatalogService
-      microservice SearchService
-      microservice InventoryService
-      database ProductDB [tech: "PostgreSQL"]
-      cache ProductCache [tech: "Redis"]
+    component "catalog-service" {
+      source "company/catalog-service:latest"
+      port 8080
     }
 
-    connections {
-      CatalogService -> ProductDB
-      CatalogService -> ProductCache
-      SearchService -> ProductCache
-      InventoryService -> ProductDB
+    component "search-service" {
+      source "company/search-service:latest"
+      port 8082
+    }
+
+    database "product-db" {
+      engine postgresql
+      storage "200Gi"
+    }
+
+    database "search-index" {
+      engine elasticsearch
+      storage "50Gi"
+    }
+
+    flow {
+      catalog-service -> product-db
+      search-service -> search-index
+      catalog-service -> search-index : "sync products"
     }
   }
 
+  // ============================================
   // Order Processing Cell
-  cell OrderCell {
-    label: "Order Processing"
-    type: logic
+  // ============================================
 
-    gateway {
-      label: "Order API Gateway"
-      exposes: [api]
+  cell "Order Processing" type:logic {
+    description "Order creation and fulfillment"
+
+    gateway ingress "order-api" {
+      protocol https
+      port 443
+      context "/orders"
+
+      route "/create" -> order-service
+      route "/cart" -> cart-service
     }
 
-    components {
-      microservice OrderService
-      microservice CartService
-      microservice CheckoutService
-      database OrderDB [tech: "PostgreSQL"]
-      broker OrderQueue [tech: "RabbitMQ"]
+    gateway egress "payment-gateway" {
+      protocol https
+      target "https://api.stripe.com"
+      policy retry
     }
 
-    connections {
-      CartService -> OrderService
-      OrderService -> OrderDB
-      CheckoutService -> OrderService
-      CheckoutService -> OrderQueue
-    }
-  }
-
-  // Notification Cell
-  cell NotificationCell {
-    label: "Notifications"
-    type: logic
-
-    gateway {
-      label: "Notification Gateway"
-      exposes: [api]
+    component "order-service" {
+      source "company/order-service:latest"
+      port 8080
     }
 
-    components {
-      microservice EmailService
-      microservice PushService
-      microservice SMSService
-      broker NotificationQueue [tech: "RabbitMQ"]
+    component "cart-service" {
+      source "company/cart-service:latest"
+      port 8081
     }
 
-    connections {
-      NotificationQueue -> EmailService
-      NotificationQueue -> PushService
-      NotificationQueue -> SMSService
+    database "order-db" {
+      engine postgresql
+      storage "500Gi"
+    }
+
+    flow {
+      cart-service -> order-service
+      order-service -> order-db
     }
   }
 
   // ============================================
-  // BOTTOM ZONE: Southbound external services
+  // External Systems
   // ============================================
 
-  // Payment providers (cells connect southbound)
-  external StripeAPI {
-    label: "Stripe Payment"
-    type: saas
-    provides: [api]
+  external "Stripe" type:saas {
+    provides [api]
   }
 
-  external PayPalAPI {
-    label: "PayPal"
-    type: saas
-    provides: [api]
-  }
-
-  // Email/SMS providers
-  external SendGrid {
-    label: "SendGrid Email"
-    type: saas
-    provides: [api]
-  }
-
-  external TwilioAPI {
-    label: "Twilio SMS"
-    type: saas
-    provides: [api]
-  }
-
-  // Shipping providers
-  external ShippingAPI {
-    label: "Shipping Provider"
-    type: saas
-    provides: [api]
-  }
-
-  // Analytics
-  external AnalyticsAPI {
-    label: "Analytics Platform"
-    type: saas
-    provides: [api]
+  external "SendGrid" type:saas {
+    provides [api]
   }
 
   // ============================================
-  // CONNECTIONS
+  // Inter-Cell Traffic Flows
   // ============================================
-  connections {
-    // User to Frontend (header connections)
-    WebUser -> WebApp
-    MobileUser -> MobileApp
-    AdminUser -> AdminPortal
 
-    // Frontend to Cells (northbound - places frontends in header)
-    WebApp -> UserCell [northbound]
-    WebApp -> ProductCell [northbound]
-    WebApp -> OrderCell [northbound]
-    MobileApp -> UserCell [northbound]
-    MobileApp -> ProductCell [northbound]
-    MobileApp -> OrderCell [northbound]
-    AdminPortal -> UserCell [northbound]
-    AdminPortal -> NotificationCell [northbound]
-
-    // Cell to Cell (eastbound - horizontal connections)
-    UserCell -> ProductCell [eastbound]
-    ProductCell -> OrderCell [eastbound]
-    OrderCell -> NotificationCell [eastbound]
-
-    // Cell to External Services (southbound - places externals in bottom)
-    OrderCell -> StripeAPI [southbound]
-    OrderCell -> PayPalAPI [southbound]
-    OrderCell -> ShippingAPI [southbound]
-    NotificationCell -> SendGrid [southbound]
-    NotificationCell -> TwilioAPI [southbound]
-    ProductCell -> AnalyticsAPI [southbound]
+  flow "authentication" {
+    UserManagement -> ProductCatalog : "verify user"
+    UserManagement -> OrderProcessing : "authorize purchase"
   }
 
+  flow "checkout" {
+    ProductCatalog -> OrderProcessing : "add to cart"
+    OrderProcessing -> Stripe : "process payment"
+    OrderProcessing -> SendGrid : "send confirmation"
+  }
 }
 `;

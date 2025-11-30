@@ -1,24 +1,29 @@
 /**
- * Cell Diagrams Parser
+ * CellDL Parser
  *
- * Parses tokenized Cell Diagrams DSL into a Concrete Syntax Tree (CST).
- * Complete rewrite for Cell-Based Architecture DSL.
+ * Parses tokenized CellDL (Cell Definition Language) into a Concrete Syntax Tree (CST).
+ * Based on the CellDL specification for Cell-Based Architecture.
  */
 
 import { CstParser } from 'chevrotain';
 import {
   allTokens,
   // Top-level keywords
+  Workspace,
   Diagram,
   Cell,
   External,
   User,
   Application,
   Connections,
+  Flow,
   // Cell/Gateway properties
   Label,
   Type,
   Gateway,
+  Ingress,
+  Egress,
+  Component,
   Components,
   Cluster,
   Exposes,
@@ -26,6 +31,10 @@ import {
   Auth,
   Federated,
   LocalSts,
+  Route,
+  Context,
+  Description,
+  Property,
   // Cell types
   Logic,
   Integration,
@@ -51,6 +60,14 @@ import {
   Ms,
   Fn,
   Db,
+  // Component properties
+  Source,
+  Port,
+  Env,
+  Engine,
+  Storage,
+  Target,
+  Policy,
   // Connection directions
   Northbound,
   Southbound,
@@ -60,6 +77,13 @@ import {
   Api,
   Events,
   Stream,
+  // Protocol types
+  Https,
+  Http,
+  Grpc,
+  Tcp,
+  Mtls,
+  Kafka,
   // External/User properties
   Provides,
   Channels,
@@ -87,6 +111,7 @@ import {
   False,
   Identifier,
   Arrow,
+  Equals,
   Dot,
   LBrace,
   RBrace,
@@ -106,7 +131,7 @@ export class CellDiagramsParser extends CstParser {
   constructor() {
     super(allTokens, {
       recoveryEnabled: true,
-      maxLookahead: 3,
+      maxLookahead: 4,
     });
     this.performSelfAnalysis();
   }
@@ -116,10 +141,12 @@ export class CellDiagramsParser extends CstParser {
   // ========================================
 
   /**
-   * Program = DiagramDefinition | Statement*
+   * Program = WorkspaceBlock | DiagramBlock | Statement*
+   * Entry point supporting both workspace (new) and diagram (legacy) syntax
    */
   public program = this.RULE('program', () => {
     this.OR([
+      { ALT: () => this.SUBRULE(this.workspaceBlock) },
       { ALT: () => this.SUBRULE(this.diagramDefinition) },
       {
         ALT: () => {
@@ -132,7 +159,66 @@ export class CellDiagramsParser extends CstParser {
   });
 
   /**
+   * WorkspaceBlock = "workspace" (StringLiteral | Identifier) "{" WorkspaceBody* "}"
+   * New CellDL root block with version/description/property support
+   */
+  private workspaceBlock = this.RULE('workspaceBlock', () => {
+    this.CONSUME(Workspace);
+    this.OR([
+      { ALT: () => this.CONSUME(StringLiteral, { LABEL: 'workspaceName' }) },
+      { ALT: () => this.CONSUME(Identifier, { LABEL: 'workspaceName' }) },
+    ]);
+    this.CONSUME(LBrace);
+    this.MANY(() => {
+      this.SUBRULE(this.workspaceBody);
+    });
+    this.CONSUME(RBrace);
+  });
+
+  /**
+   * WorkspaceBody = VersionStatement | DescriptionStatement | PropertyStatement | Statement
+   */
+  private workspaceBody = this.RULE('workspaceBody', () => {
+    this.OR([
+      { ALT: () => this.SUBRULE(this.versionStatement) },
+      { ALT: () => this.SUBRULE(this.descriptionStatement) },
+      { ALT: () => this.SUBRULE(this.propertyStatement) },
+      { ALT: () => this.SUBRULE(this.statement) },
+    ]);
+  });
+
+  /**
+   * VersionStatement = "version" StringLiteral
+   */
+  private versionStatement = this.RULE('versionStatement', () => {
+    this.CONSUME(Version);
+    this.CONSUME(StringLiteral, { LABEL: 'versionValue' });
+  });
+
+  /**
+   * DescriptionStatement = "description" StringLiteral
+   */
+  private descriptionStatement = this.RULE('descriptionStatement', () => {
+    this.CONSUME(Description);
+    this.CONSUME(StringLiteral, { LABEL: 'descriptionValue' });
+  });
+
+  /**
+   * PropertyStatement = "property" (Identifier | StringLiteral) "=" StringLiteral
+   */
+  private propertyStatement = this.RULE('propertyStatement', () => {
+    this.CONSUME(Property);
+    this.OR1([
+      { ALT: () => this.CONSUME(Identifier, { LABEL: 'propertyKey' }) },
+      { ALT: () => this.CONSUME1(StringLiteral, { LABEL: 'propertyKey' }) },
+    ]);
+    this.CONSUME(Equals);
+    this.CONSUME2(StringLiteral, { LABEL: 'propertyValue' });
+  });
+
+  /**
    * DiagramDefinition = "diagram" (Identifier | StringLiteral) "{" Statement* "}"
+   * Legacy syntax support
    */
   private diagramDefinition = this.RULE('diagramDefinition', () => {
     this.CONSUME(Diagram);
@@ -149,7 +235,7 @@ export class CellDiagramsParser extends CstParser {
 
   /**
    * Statement = CellDefinition | ExternalDefinition | UserDefinition
-   *           | ApplicationDefinition | ConnectionsBlock
+   *           | ApplicationDefinition | ConnectionsBlock | FlowBlock
    */
   private statement = this.RULE('statement', () => {
     this.OR([
@@ -158,6 +244,7 @@ export class CellDiagramsParser extends CstParser {
       { ALT: () => this.SUBRULE(this.userDefinition) },
       { ALT: () => this.SUBRULE(this.applicationDefinition) },
       { ALT: () => this.SUBRULE(this.connectionsBlock) },
+      { ALT: () => this.SUBRULE(this.flowBlock) },
     ]);
   });
 
@@ -166,11 +253,21 @@ export class CellDiagramsParser extends CstParser {
   // ========================================
 
   /**
-   * CellDefinition = "cell" Identifier "{" CellBody* "}"
+   * CellDefinition = "cell" (StringLiteral | Identifier) ("type:" CellType)? "{" CellBody* "}"
+   * Supports both quoted and unquoted names, and inline type specification
    */
   private cellDefinition = this.RULE('cellDefinition', () => {
     this.CONSUME(Cell);
-    this.CONSUME(Identifier, { LABEL: 'cellId' });
+    this.OR1([
+      { ALT: () => this.CONSUME(StringLiteral, { LABEL: 'cellId' }) },
+      { ALT: () => this.CONSUME(Identifier, { LABEL: 'cellId' }) },
+    ]);
+    // Optional inline type: "type:logic"
+    this.OPTION1(() => {
+      this.CONSUME(Type);
+      this.CONSUME(Colon);
+      this.SUBRULE(this.cellTypeValue, { LABEL: 'inlineType' });
+    });
     this.CONSUME(LBrace);
     this.MANY(() => {
       this.SUBRULE(this.cellBody);
@@ -179,26 +276,37 @@ export class CellDiagramsParser extends CstParser {
   });
 
   /**
-   * CellBody = LabelProperty | TypeProperty | GatewayBlock
-   *          | ComponentsBlock | ClusterDefinition | ConnectionsBlock
+   * CellBody = LabelProperty | TypeProperty | DescriptionProperty | ReplicasProperty
+   *          | GatewayBlock | ComponentsBlock | ComponentBlock | ClusterDefinition
+   *          | ConnectionsBlock | FlowBlock | NestedCellDefinition
    */
   private cellBody = this.RULE('cellBody', () => {
     this.OR([
       { ALT: () => this.SUBRULE(this.labelProperty) },
       { ALT: () => this.SUBRULE(this.typeProperty) },
+      { ALT: () => this.SUBRULE(this.descriptionProperty) },
+      { ALT: () => this.SUBRULE(this.replicasProperty) },
       { ALT: () => this.SUBRULE(this.gatewayBlock) },
       { ALT: () => this.SUBRULE(this.componentsBlock) },
+      { ALT: () => this.SUBRULE(this.componentBlock) },
+      { ALT: () => this.SUBRULE(this.databaseBlock) },
+      { ALT: () => this.SUBRULE(this.functionBlock) },
+      { ALT: () => this.SUBRULE(this.legacyBlock) },
       { ALT: () => this.SUBRULE(this.clusterDefinition) },
       { ALT: () => this.SUBRULE(this.connectionsBlock) },
+      { ALT: () => this.SUBRULE(this.flowBlock) },
+      // Nested cells for composite architectures
+      { ALT: () => this.SUBRULE(this.cellDefinition, { LABEL: 'nestedCell' }) },
     ]);
   });
 
   /**
    * LabelProperty = "label" ":" StringLiteral
+   *              | "label" StringLiteral (without colon for CellDL syntax)
    */
   private labelProperty = this.RULE('labelProperty', () => {
     this.CONSUME(Label);
-    this.CONSUME(Colon);
+    this.OPTION(() => this.CONSUME(Colon));
     this.CONSUME(StringLiteral, { LABEL: 'labelValue' });
   });
 
@@ -209,6 +317,24 @@ export class CellDiagramsParser extends CstParser {
     this.CONSUME(Type);
     this.CONSUME(Colon);
     this.SUBRULE(this.cellTypeValue);
+  });
+
+  /**
+   * DescriptionProperty = "description" StringLiteral
+   */
+  private descriptionProperty = this.RULE('descriptionProperty', () => {
+    this.CONSUME(Description);
+    this.CONSUME(StringLiteral, { LABEL: 'descValue' });
+  });
+
+  /**
+   * ReplicasProperty = "replicas" NumberLiteral
+   *                 | "replicas" ":" NumberLiteral
+   */
+  private replicasProperty = this.RULE('replicasProperty', () => {
+    this.CONSUME(Replicas);
+    this.OPTION(() => this.CONSUME(Colon));
+    this.CONSUME(NumberLiteral, { LABEL: 'replicaCount' });
   });
 
   /**
@@ -226,17 +352,28 @@ export class CellDiagramsParser extends CstParser {
   });
 
   // ========================================
-  // Gateway Definition
+  // Gateway Definition (Ingress/Egress)
   // ========================================
 
   /**
-   * GatewayBlock = "gateway" Identifier? "{" GatewayProperty* "}"
-   * The identifier is optional - anonymous gateways are common in cells
+   * GatewayBlock = "gateway" GatewayDirection? (StringLiteral | Identifier)? "{" GatewayProperty* "}"
+   * Supports both simple and ingress/egress gateway syntax
    */
   private gatewayBlock = this.RULE('gatewayBlock', () => {
     this.CONSUME(Gateway);
+    // Optional direction: ingress or egress
     this.OPTION1(() => {
-      this.CONSUME(Identifier, { LABEL: 'gatewayId' });
+      this.OR1([
+        { ALT: () => this.CONSUME(Ingress, { LABEL: 'gatewayDirection' }) },
+        { ALT: () => this.CONSUME(Egress, { LABEL: 'gatewayDirection' }) },
+      ]);
+    });
+    // Optional gateway name
+    this.OPTION2(() => {
+      this.OR2([
+        { ALT: () => this.CONSUME(StringLiteral, { LABEL: 'gatewayId' }) },
+        { ALT: () => this.CONSUME(Identifier, { LABEL: 'gatewayId' }) },
+      ]);
     });
     this.CONSUME(LBrace);
     this.MANY(() => {
@@ -246,23 +383,98 @@ export class CellDiagramsParser extends CstParser {
   });
 
   /**
-   * GatewayProperty = LabelProperty | ExposesProperty | PoliciesProperty | AuthProperty
+   * GatewayProperty = LabelProperty | ProtocolProperty | PortProperty | ContextProperty
+   *                 | ExposesProperty | PoliciesProperty | AuthProperty
+   *                 | TargetProperty | PolicyProperty | RouteStatement
    */
   private gatewayProperty = this.RULE('gatewayProperty', () => {
     this.OR([
       { ALT: () => this.SUBRULE(this.labelProperty) },
+      { ALT: () => this.SUBRULE(this.protocolProperty) },
+      { ALT: () => this.SUBRULE(this.portProperty) },
+      { ALT: () => this.SUBRULE(this.contextProperty) },
       { ALT: () => this.SUBRULE(this.exposesProperty) },
       { ALT: () => this.SUBRULE(this.policiesProperty) },
       { ALT: () => this.SUBRULE(this.authProperty) },
+      { ALT: () => this.SUBRULE(this.targetProperty) },
+      { ALT: () => this.SUBRULE(this.policyProperty) },
+      { ALT: () => this.SUBRULE(this.routeStatement) },
     ]);
   });
 
   /**
+   * ProtocolProperty = "protocol" StringLiteral | "protocol" ProtocolKeyword
+   */
+  private protocolProperty = this.RULE('protocolProperty', () => {
+    this.CONSUME(Protocol);
+    this.OPTION(() => this.CONSUME(Colon));
+    this.OR([
+      { ALT: () => this.CONSUME(StringLiteral, { LABEL: 'protocolValue' }) },
+      { ALT: () => this.CONSUME(Https, { LABEL: 'protocolValue' }) },
+      { ALT: () => this.CONSUME(Http, { LABEL: 'protocolValue' }) },
+      { ALT: () => this.CONSUME(Grpc, { LABEL: 'protocolValue' }) },
+      { ALT: () => this.CONSUME(Tcp, { LABEL: 'protocolValue' }) },
+      { ALT: () => this.CONSUME(Mtls, { LABEL: 'protocolValue' }) },
+      { ALT: () => this.CONSUME(Kafka, { LABEL: 'protocolValue' }) },
+    ]);
+  });
+
+  /**
+   * PortProperty = "port" NumberLiteral
+   */
+  private portProperty = this.RULE('portProperty', () => {
+    this.CONSUME(Port);
+    this.OPTION(() => this.CONSUME(Colon));
+    this.CONSUME(NumberLiteral, { LABEL: 'portValue' });
+  });
+
+  /**
+   * ContextProperty = "context" StringLiteral
+   */
+  private contextProperty = this.RULE('contextProperty', () => {
+    this.CONSUME(Context);
+    this.OPTION(() => this.CONSUME(Colon));
+    this.CONSUME(StringLiteral, { LABEL: 'contextValue' });
+  });
+
+  /**
+   * TargetProperty = "target" StringLiteral
+   */
+  private targetProperty = this.RULE('targetProperty', () => {
+    this.CONSUME(Target);
+    this.OPTION(() => this.CONSUME(Colon));
+    this.CONSUME(StringLiteral, { LABEL: 'targetValue' });
+  });
+
+  /**
+   * PolicyProperty = "policy" (StringLiteral | Identifier)
+   */
+  private policyProperty = this.RULE('policyProperty', () => {
+    this.CONSUME(Policy);
+    this.OPTION(() => this.CONSUME(Colon));
+    this.OR([
+      { ALT: () => this.CONSUME(StringLiteral, { LABEL: 'policyValue' }) },
+      { ALT: () => this.CONSUME(Identifier, { LABEL: 'policyValue' }) },
+    ]);
+  });
+
+  /**
+   * RouteStatement = "route" StringLiteral "->" Reference
+   */
+  private routeStatement = this.RULE('routeStatement', () => {
+    this.CONSUME(Route);
+    this.CONSUME(StringLiteral, { LABEL: 'routePath' });
+    this.CONSUME(Arrow);
+    this.SUBRULE(this.reference, { LABEL: 'routeTarget' });
+  });
+
+  /**
    * ExposesProperty = "exposes" ":" "[" EndpointType ("," EndpointType)* "]"
+   *                | "exposes" "[" EndpointType ("," EndpointType)* "]"
    */
   private exposesProperty = this.RULE('exposesProperty', () => {
     this.CONSUME(Exposes);
-    this.CONSUME(Colon);
+    this.OPTION1(() => this.CONSUME(Colon));
     this.CONSUME(LBracket);
     this.SUBRULE1(this.endpointType);
     this.MANY(() => {
@@ -277,7 +489,7 @@ export class CellDiagramsParser extends CstParser {
    */
   private policiesProperty = this.RULE('policiesProperty', () => {
     this.CONSUME(Policies);
-    this.CONSUME(Colon);
+    this.OPTION(() => this.CONSUME(Colon));
     this.CONSUME(LBracket);
     this.SUBRULE1(this.policyValue);
     this.MANY(() => {
@@ -300,20 +512,18 @@ export class CellDiagramsParser extends CstParser {
   /**
    * AuthProperty = "auth" ":" AuthValue
    * AuthValue = "local-sts" | "federated" ("(" Reference ")")?
-   * The reference is optional for federated auth
    */
   private authProperty = this.RULE('authProperty', () => {
     this.CONSUME(Auth);
-    this.CONSUME(Colon);
+    this.OPTION1(() => this.CONSUME(Colon));
     this.OR([
       { ALT: () => this.CONSUME(LocalSts, { LABEL: 'authType' }) },
       {
         ALT: () => {
           this.CONSUME(Federated, { LABEL: 'authType' });
-          // Reference is optional - federated can be used without specifying the STS
-          this.OPTION(() => {
+          this.OPTION2(() => {
             this.CONSUME(LParen);
-            this.SUBRULE(this.entityReference);
+            this.SUBRULE(this.reference, { LABEL: 'authReference' });
             this.CONSUME(RParen);
           });
         },
@@ -333,11 +543,12 @@ export class CellDiagramsParser extends CstParser {
   });
 
   // ========================================
-  // Components Block
+  // Component Definitions
   // ========================================
 
   /**
    * ComponentsBlock = "components" "{" (ComponentDef | ClusterDef)* "}"
+   * Legacy style component list
    */
   private componentsBlock = this.RULE('componentsBlock', () => {
     this.CONSUME(Components);
@@ -352,21 +563,180 @@ export class CellDiagramsParser extends CstParser {
   });
 
   /**
-   * ComponentDefinition = ComponentType Identifier AttributeBlock?
+   * ComponentBlock = "component" (StringLiteral | Identifier) "{" ComponentProperty* "}"
+   * CellDL style component with block properties
+   */
+  private componentBlock = this.RULE('componentBlock', () => {
+    this.CONSUME(Component);
+    this.OR1([
+      { ALT: () => this.CONSUME(StringLiteral, { LABEL: 'componentId' }) },
+      { ALT: () => this.CONSUME(Identifier, { LABEL: 'componentId' }) },
+    ]);
+    this.CONSUME(LBrace);
+    this.MANY(() => {
+      this.SUBRULE(this.componentProperty);
+    });
+    this.CONSUME(RBrace);
+  });
+
+  /**
+   * DatabaseBlock = "database" (StringLiteral | Identifier) "{" DatabaseProperty* "}"
+   */
+  private databaseBlock = this.RULE('databaseBlock', () => {
+    this.CONSUME(Database);
+    this.OR1([
+      { ALT: () => this.CONSUME(StringLiteral, { LABEL: 'databaseId' }) },
+      { ALT: () => this.CONSUME(Identifier, { LABEL: 'databaseId' }) },
+    ]);
+    this.CONSUME(LBrace);
+    this.MANY(() => {
+      this.SUBRULE(this.databaseProperty);
+    });
+    this.CONSUME(RBrace);
+  });
+
+  /**
+   * FunctionBlock = "function" (StringLiteral | Identifier) "{" ComponentProperty* "}"
+   */
+  private functionBlock = this.RULE('functionBlock', () => {
+    this.CONSUME(Function);
+    this.OR1([
+      { ALT: () => this.CONSUME(StringLiteral, { LABEL: 'functionId' }) },
+      { ALT: () => this.CONSUME(Identifier, { LABEL: 'functionId' }) },
+    ]);
+    this.CONSUME(LBrace);
+    this.MANY(() => {
+      this.SUBRULE(this.componentProperty);
+    });
+    this.CONSUME(RBrace);
+  });
+
+  /**
+   * LegacyBlock = "legacy" (StringLiteral | Identifier) "{" ComponentProperty* "}"
+   */
+  private legacyBlock = this.RULE('legacyBlock', () => {
+    this.CONSUME(LegacyType);
+    this.OR1([
+      { ALT: () => this.CONSUME(StringLiteral, { LABEL: 'legacyId' }) },
+      { ALT: () => this.CONSUME(Identifier, { LABEL: 'legacyId' }) },
+    ]);
+    this.CONSUME(LBrace);
+    this.MANY(() => {
+      this.SUBRULE(this.componentProperty);
+    });
+    this.CONSUME(RBrace);
+  });
+
+  /**
+   * ComponentProperty = SourceProperty | PortProperty | EnvBlock | GenericProperty
+   */
+  private componentProperty = this.RULE('componentProperty', () => {
+    this.OR([
+      { ALT: () => this.SUBRULE(this.sourceProperty) },
+      { ALT: () => this.SUBRULE(this.portProperty) },
+      { ALT: () => this.SUBRULE(this.envBlock) },
+      { ALT: () => this.SUBRULE(this.genericProperty) },
+    ]);
+  });
+
+  /**
+   * DatabaseProperty = EngineProperty | StorageProperty | VersionProperty | GenericProperty
+   */
+  private databaseProperty = this.RULE('databaseProperty', () => {
+    this.OR([
+      { ALT: () => this.SUBRULE(this.engineProperty) },
+      { ALT: () => this.SUBRULE(this.storageProperty) },
+      { ALT: () => this.SUBRULE(this.versionPropertyDb) },
+      { ALT: () => this.SUBRULE(this.genericProperty) },
+    ]);
+  });
+
+  /**
+   * SourceProperty = "source" StringLiteral
+   */
+  private sourceProperty = this.RULE('sourceProperty', () => {
+    this.CONSUME(Source);
+    this.OPTION(() => this.CONSUME(Colon));
+    this.CONSUME(StringLiteral, { LABEL: 'sourceValue' });
+  });
+
+  /**
+   * EngineProperty = "engine" (StringLiteral | Identifier)
+   */
+  private engineProperty = this.RULE('engineProperty', () => {
+    this.CONSUME(Engine);
+    this.OPTION(() => this.CONSUME(Colon));
+    this.OR([
+      { ALT: () => this.CONSUME(StringLiteral, { LABEL: 'engineValue' }) },
+      { ALT: () => this.CONSUME(Identifier, { LABEL: 'engineValue' }) },
+    ]);
+  });
+
+  /**
+   * StorageProperty = "storage" StringLiteral
+   */
+  private storageProperty = this.RULE('storageProperty', () => {
+    this.CONSUME(Storage);
+    this.OPTION(() => this.CONSUME(Colon));
+    this.CONSUME(StringLiteral, { LABEL: 'storageValue' });
+  });
+
+  /**
+   * VersionPropertyDb = "version" StringLiteral
+   */
+  private versionPropertyDb = this.RULE('versionPropertyDb', () => {
+    this.CONSUME(Version);
+    this.OPTION(() => this.CONSUME(Colon));
+    this.CONSUME(StringLiteral, { LABEL: 'versionValue' });
+  });
+
+  /**
+   * EnvBlock = "env" "{" EnvVar* "}"
+   */
+  private envBlock = this.RULE('envBlock', () => {
+    this.CONSUME(Env);
+    this.CONSUME(LBrace);
+    this.MANY(() => {
+      this.SUBRULE(this.envVar);
+    });
+    this.CONSUME(RBrace);
+  });
+
+  /**
+   * EnvVar = Identifier "=" StringLiteral
+   */
+  private envVar = this.RULE('envVar', () => {
+    this.CONSUME(Identifier, { LABEL: 'envKey' });
+    this.CONSUME(Equals);
+    this.CONSUME(StringLiteral, { LABEL: 'envValue' });
+  });
+
+  /**
+   * GenericProperty = Identifier (":"? Value)
+   */
+  private genericProperty = this.RULE('genericProperty', () => {
+    this.CONSUME(Identifier, { LABEL: 'propKey' });
+    this.OPTION(() => this.CONSUME(Colon));
+    this.SUBRULE(this.propertyValue, { LABEL: 'propValue' });
+  });
+
+  /**
+   * ComponentDefinition = ComponentType (StringLiteral | Identifier) AttributeBlock?
+   * Legacy inline component syntax
    */
   private componentDefinition = this.RULE('componentDefinition', () => {
     this.SUBRULE(this.componentType);
-    this.CONSUME(Identifier, { LABEL: 'componentId' });
+    this.OR([
+      { ALT: () => this.CONSUME(StringLiteral, { LABEL: 'componentId' }) },
+      { ALT: () => this.CONSUME(Identifier, { LABEL: 'componentId' }) },
+    ]);
     this.OPTION(() => {
       this.SUBRULE(this.attributeBlock);
     });
   });
 
   /**
-   * ComponentType = "microservice" | "function" | "database" | "broker" | "cache"
-   *               | "gateway" | "idp" | "sts" | "userstore" | "esb" | "adapter"
-   *               | "transformer" | "webapp" | "mobile" | "iot" | "legacy"
-   *               | "ms" | "fn" | "db" (aliases)
+   * ComponentType = all component type keywords
    */
   private componentType = this.RULE('componentType', () => {
     this.OR([
@@ -427,17 +797,7 @@ export class CellDiagramsParser extends CstParser {
   });
 
   /**
-   * ReplicasProperty = "replicas" ":" NumberLiteral
-   */
-  private replicasProperty = this.RULE('replicasProperty', () => {
-    this.CONSUME(Replicas);
-    this.CONSUME(Colon);
-    this.CONSUME(NumberLiteral, { LABEL: 'replicaCount' });
-  });
-
-  /**
    * AttributeBlock = "[" Property ("," Property)* "]"
-   * Attributes are enclosed in square brackets with comma-separated properties
    */
   private attributeBlock = this.RULE('attributeBlock', () => {
     this.CONSUME(LBracket);
@@ -461,7 +821,7 @@ export class CellDiagramsParser extends CstParser {
   });
 
   /**
-   * PropertyKey = Identifier | Tech | Replicas | Role | Sidecar | Provider | Protocol | Via | Version
+   * PropertyKey = Identifier | keyword that can be used as key
    */
   private propertyKey = this.RULE('propertyKey', () => {
     this.OR([
@@ -509,12 +869,11 @@ export class CellDiagramsParser extends CstParser {
   });
 
   /**
-   * ArrayElement = StringLiteral | Identifier | Keywords that can be used as values
+   * ArrayElement = StringLiteral | Identifier | Keywords as values
    */
   private arrayElement = this.RULE('arrayElement', () => {
     this.OR([
       { ALT: () => this.CONSUME(StringLiteral, { LABEL: 'element' }) },
-      // Keywords that can appear as array values
       { ALT: () => this.CONSUME(Webapp, { LABEL: 'element' }) },
       { ALT: () => this.CONSUME(Mobile, { LABEL: 'element' }) },
       { ALT: () => this.CONSUME(Iot, { LABEL: 'element' }) },
@@ -529,12 +888,11 @@ export class CellDiagramsParser extends CstParser {
   });
 
   /**
-   * IdentifierValue = Identifier or any keyword that can be used as a value
+   * IdentifierValue = Identifier or keyword as value
    */
   private identifierValue = this.RULE('identifierValue', () => {
     this.OR([
       { ALT: () => this.CONSUME(Identifier, { LABEL: 'idValue' }) },
-      // Allow keywords as values
       { ALT: () => this.CONSUME(Logic, { LABEL: 'idValue' }) },
       { ALT: () => this.CONSUME(Integration, { LABEL: 'idValue' }) },
       { ALT: () => this.CONSUME(Data, { LABEL: 'idValue' }) },
@@ -554,7 +912,61 @@ export class CellDiagramsParser extends CstParser {
   });
 
   // ========================================
-  // Connections Block
+  // Flow Block
+  // ========================================
+
+  /**
+   * FlowBlock = "flow" (StringLiteral | Identifier)? "{" FlowStatement* "}"
+   */
+  private flowBlock = this.RULE('flowBlock', () => {
+    this.CONSUME(Flow);
+    this.OPTION1(() => {
+      this.OR1([
+        { ALT: () => this.CONSUME(StringLiteral, { LABEL: 'flowName' }) },
+        { ALT: () => this.CONSUME(Identifier, { LABEL: 'flowName' }) },
+      ]);
+    });
+    this.CONSUME(LBrace);
+    this.MANY(() => {
+      this.SUBRULE(this.flowStatement);
+    });
+    this.CONSUME(RBrace);
+  });
+
+  /**
+   * FlowStatement = Reference ("->" Reference)+ (":" StringLiteral)?
+   * Supports chained flows: A -> B -> C : "Label"
+   */
+  private flowStatement = this.RULE('flowStatement', () => {
+    this.SUBRULE1(this.reference, { LABEL: 'flowSource' });
+    this.AT_LEAST_ONE(() => {
+      this.CONSUME(Arrow);
+      this.SUBRULE2(this.reference, { LABEL: 'flowTarget' });
+    });
+    this.OPTION(() => {
+      this.CONSUME(Colon);
+      this.CONSUME(StringLiteral, { LABEL: 'flowLabel' });
+    });
+  });
+
+  /**
+   * Reference = Identifier ("." Identifier)?
+   * Supports both simple (Component) and qualified (Cell.Component) references
+   */
+  private reference = this.RULE('reference', () => {
+    // Allow keywords like "user" as first part of reference
+    this.OR1([
+      { ALT: () => this.CONSUME1(Identifier, { LABEL: 'refEntity' }) },
+      { ALT: () => this.CONSUME(User, { LABEL: 'refEntity' }) },
+    ]);
+    this.OPTION(() => {
+      this.CONSUME(Dot);
+      this.CONSUME2(Identifier, { LABEL: 'refComponent' });
+    });
+  });
+
+  // ========================================
+  // Connections Block (Legacy)
   // ========================================
 
   /**
@@ -571,7 +983,6 @@ export class CellDiagramsParser extends CstParser {
 
   /**
    * Connection = Source "->" Target ConnectionAttributes?
-   * Connection attributes can include direction flags and key-value pairs
    */
   private connection = this.RULE('connection', () => {
     this.SUBRULE1(this.connectionEndpoint, { LABEL: 'source' });
@@ -584,7 +995,6 @@ export class CellDiagramsParser extends CstParser {
 
   /**
    * ConnectionAttributes = "[" ConnectionAttr ("," ConnectionAttr)* "]"
-   * Allows both direction flags and key-value pairs
    */
   private connectionAttributes = this.RULE('connectionAttributes', () => {
     this.CONSUME(LBracket);
@@ -600,7 +1010,6 @@ export class CellDiagramsParser extends CstParser {
 
   /**
    * ConnectionAttr = Direction | Property
-   * Either a direction flag or a key-value property
    */
   private connectionAttr = this.RULE('connectionAttr', () => {
     this.OR([
@@ -632,33 +1041,42 @@ export class CellDiagramsParser extends CstParser {
     });
   });
 
-  /**
-   * EntityReference = Identifier ("." Identifier)?
-   * Used for auth federation reference
-   */
-  private entityReference = this.RULE('entityReference', () => {
-    this.CONSUME1(Identifier, { LABEL: 'entity' });
-    this.OPTION(() => {
-      this.CONSUME(Dot);
-      this.CONSUME2(Identifier, { LABEL: 'component' });
-    });
-  });
-
   // ========================================
   // External Definition
   // ========================================
 
   /**
-   * ExternalDefinition = "external" Identifier "{" ExternalBody* "}"
+   * ExternalDefinition = "external" (StringLiteral | Identifier) InlineExternalType? "{" ExternalBody* "}"
    */
   private externalDefinition = this.RULE('externalDefinition', () => {
     this.CONSUME(External);
-    this.CONSUME(Identifier, { LABEL: 'externalId' });
+    this.OR1([
+      { ALT: () => this.CONSUME(StringLiteral, { LABEL: 'externalId' }) },
+      { ALT: () => this.CONSUME(Identifier, { LABEL: 'externalId' }) },
+    ]);
+    // Support inline type: external "Name" type:saas { }
+    this.OPTION(() => {
+      this.SUBRULE(this.inlineExternalType);
+    });
     this.CONSUME(LBrace);
     this.MANY(() => {
       this.SUBRULE(this.externalBody);
     });
     this.CONSUME(RBrace);
+  });
+
+  /**
+   * InlineExternalType = "type:" ExternalType
+   */
+  private inlineExternalType = this.RULE('inlineExternalType', () => {
+    this.CONSUME(Type);
+    this.CONSUME(Colon);
+    this.OR([
+      { ALT: () => this.CONSUME(Saas, { LABEL: 'externalType' }) },
+      { ALT: () => this.CONSUME(Partner, { LABEL: 'externalType' }) },
+      { ALT: () => this.CONSUME(Enterprise, { LABEL: 'externalType' }) },
+      { ALT: () => this.CONSUME(Identifier, { LABEL: 'externalType' }) },
+    ]);
   });
 
   /**
@@ -674,7 +1092,6 @@ export class CellDiagramsParser extends CstParser {
 
   /**
    * ExternalTypeProperty = "type" ":" ExternalType
-   * ExternalType = "saas" | "partner" | "enterprise"
    */
   private externalTypeProperty = this.RULE('externalTypeProperty', () => {
     this.CONSUME(Type);
@@ -692,7 +1109,7 @@ export class CellDiagramsParser extends CstParser {
    */
   private providesProperty = this.RULE('providesProperty', () => {
     this.CONSUME(Provides);
-    this.CONSUME(Colon);
+    this.OPTION(() => this.CONSUME(Colon));
     this.CONSUME(LBracket);
     this.SUBRULE1(this.endpointType);
     this.MANY(() => {
@@ -707,16 +1124,37 @@ export class CellDiagramsParser extends CstParser {
   // ========================================
 
   /**
-   * UserDefinition = "user" Identifier "{" UserBody* "}"
+   * UserDefinition = "user" (StringLiteral | Identifier) InlineUserType? "{" UserBody* "}"
    */
   private userDefinition = this.RULE('userDefinition', () => {
     this.CONSUME(User);
-    this.CONSUME(Identifier, { LABEL: 'userId' });
+    this.OR1([
+      { ALT: () => this.CONSUME(StringLiteral, { LABEL: 'userId' }) },
+      { ALT: () => this.CONSUME(Identifier, { LABEL: 'userId' }) },
+    ]);
+    // Support inline type: user "Name" type:external { }
+    this.OPTION(() => {
+      this.SUBRULE(this.inlineUserType);
+    });
     this.CONSUME(LBrace);
     this.MANY(() => {
       this.SUBRULE(this.userBody);
     });
     this.CONSUME(RBrace);
+  });
+
+  /**
+   * InlineUserType = "type:" UserType
+   */
+  private inlineUserType = this.RULE('inlineUserType', () => {
+    this.CONSUME(Type);
+    this.CONSUME(Colon);
+    this.OR([
+      { ALT: () => this.CONSUME(External, { LABEL: 'userType' }) },
+      { ALT: () => this.CONSUME(Internal, { LABEL: 'userType' }) },
+      { ALT: () => this.CONSUME(System, { LABEL: 'userType' }) },
+      { ALT: () => this.CONSUME(Identifier, { LABEL: 'userType' }) },
+    ]);
   });
 
   /**
@@ -732,7 +1170,6 @@ export class CellDiagramsParser extends CstParser {
 
   /**
    * UserTypeProperty = "type" ":" UserType
-   * UserType = "external" | "internal" | "system"
    */
   private userTypeProperty = this.RULE('userTypeProperty', () => {
     this.CONSUME(Type);
@@ -750,7 +1187,7 @@ export class CellDiagramsParser extends CstParser {
    */
   private channelsProperty = this.RULE('channelsProperty', () => {
     this.CONSUME(Channels);
-    this.CONSUME(Colon);
+    this.OPTION(() => this.CONSUME(Colon));
     this.CONSUME(LBracket);
     this.SUBRULE1(this.channelValue);
     this.MANY(() => {
@@ -761,8 +1198,7 @@ export class CellDiagramsParser extends CstParser {
   });
 
   /**
-   * ChannelValue = Identifier | StringLiteral | "web" | "mobile" | "iot"
-   * Channel values can be identifiers, strings, or channel keywords
+   * ChannelValue = Identifier | StringLiteral | channel keywords
    */
   private channelValue = this.RULE('channelValue', () => {
     this.OR([
@@ -783,7 +1219,10 @@ export class CellDiagramsParser extends CstParser {
    */
   private applicationDefinition = this.RULE('applicationDefinition', () => {
     this.CONSUME(Application);
-    this.CONSUME(Identifier, { LABEL: 'applicationId' });
+    this.OR([
+      { ALT: () => this.CONSUME(StringLiteral, { LABEL: 'applicationId' }) },
+      { ALT: () => this.CONSUME(Identifier, { LABEL: 'applicationId' }) },
+    ]);
     this.CONSUME(LBrace);
     this.MANY(() => {
       this.SUBRULE(this.applicationBody);
@@ -837,6 +1276,9 @@ export class CellDiagramsParser extends CstParser {
  * Reuse this instance for performance.
  */
 export const parserInstance = new CellDiagramsParser();
+
+// Alias for CellDL naming
+export const CellDLParser = CellDiagramsParser;
 
 /**
  * Get the CST visitor constructor for building visitors.

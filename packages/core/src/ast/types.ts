@@ -1,8 +1,8 @@
 /**
- * Cell Diagrams AST Type Definitions
+ * CellDL AST Type Definitions
  *
  * Complete type system for Cell-Based Architecture DSL.
- * Supports cells, gateways, components, clusters, connections, users, and external systems.
+ * Supports both new CellDL syntax (workspace, flow, route) and legacy diagram syntax.
  */
 
 // ============================================
@@ -102,6 +102,9 @@ export type AuthType =
   | 'local-sts'   // STS inside the cell
   | 'federated';  // Federated to external IDP
 
+/** Gateway direction (new CellDL syntax) */
+export type GatewayDirection = 'ingress' | 'egress';
+
 /** Gateway position on cell boundary */
 export type GatewayPosition =
   | 'north'   // Top of cell (external ingress)
@@ -113,13 +116,26 @@ export type GatewayPosition =
 // AST Node Definitions
 // ============================================
 
-/** Root node of the AST - represents an entire diagram */
+/** Root node of the AST - represents an entire diagram/workspace */
 export interface Program extends BaseNode {
   type: 'Program';
-  /** Optional diagram name from `diagram "Name" { ... }` */
+  /** Workspace or diagram name */
   name?: string;
+  /** Version string (workspace syntax) */
+  version?: string;
+  /** Description (workspace syntax) */
+  description?: string;
+  /** Custom properties (workspace syntax) */
+  properties: PropertyDefinition[];
   /** All top-level statements */
   statements: Statement[];
+}
+
+/** Property definition in workspace */
+export interface PropertyDefinition extends BaseNode {
+  type: 'PropertyDefinition';
+  key: string;
+  value: string;
 }
 
 /** Union of all top-level statement types */
@@ -128,7 +144,8 @@ export type Statement =
   | ExternalDefinition
   | UserDefinition
   | ApplicationDefinition
-  | ConnectionsBlock;
+  | ConnectionsBlock
+  | FlowDefinition;
 
 // ============================================
 // Cell Definition
@@ -143,35 +160,35 @@ export interface CellDefinition extends BaseNode {
   label?: string;
   /** Cell classification type */
   cellType: CellType;
-  /** Gateway at cell boundary (control point) - deprecated, use gateways array */
+  /** Cell description */
+  description?: string;
+  /** Number of cell replicas */
+  replicas?: number;
+  /** Primary gateway at cell boundary (control point) */
   gateway?: GatewayDefinition;
-  /** Multiple gateways at different positions on cell boundary */
-  gateways?: GatewayDefinition[];
+  /** All gateways (ingress/egress) at different positions */
+  gateways: GatewayDefinition[];
   /** Components inside the cell */
   components: (ComponentDefinition | ClusterDefinition)[];
   /** Internal connections between components */
   connections: InternalConnection[];
+  /** Flow definitions for traffic patterns */
+  flows: FlowDefinition[];
+  /** Nested cells for composite architectures */
+  nestedCells: CellDefinition[];
 }
 
 // ============================================
 // Gateway Definition
 // ============================================
 
-/** Gateway at cell boundary - the control point for cell access */
-export interface GatewayDefinition extends BaseNode {
-  type: 'GatewayDefinition';
-  /** Gateway identifier */
-  id: string;
-  /** Position on cell boundary (north, south, east, west) */
-  position?: GatewayPosition;
-  /** Gateway type label (e.g., "External gateway", "Internal gateway", "Egress gateway") */
-  label?: string;
-  /** Endpoint types exposed by this gateway */
-  exposes: EndpointType[];
-  /** Security/governance policies applied at gateway */
-  policies?: string[];
-  /** Authentication configuration */
-  auth?: AuthConfig;
+/** Route definition inside gateway (new CellDL syntax) */
+export interface RouteDefinition extends BaseNode {
+  type: 'RouteDefinition';
+  /** Route path (e.g., "/authorize") */
+  path: string;
+  /** Target component reference */
+  target: string;
 }
 
 /** Authentication configuration for gateway */
@@ -179,13 +196,54 @@ export interface AuthConfig extends BaseNode {
   type: 'AuthConfig';
   /** Auth type: local STS or federated */
   authType: AuthType;
-  /** Reference to external IDP for federated auth (e.g., "SecurityCell.EnterpriseIDP") */
+  /** Reference to external IDP for federated auth */
   reference?: string;
+}
+
+/** Gateway at cell boundary - the control point for cell access */
+export interface GatewayDefinition extends BaseNode {
+  type: 'GatewayDefinition';
+  /** Gateway identifier */
+  id: string;
+  /** Gateway direction: ingress or egress (new CellDL syntax) */
+  direction?: GatewayDirection;
+  /** Position on cell boundary (north, south, east, west) */
+  position?: GatewayPosition;
+  /** Gateway type label */
+  label?: string;
+  /** Protocol (https, grpc, mtls, etc.) */
+  protocol?: string;
+  /** Port number */
+  port?: number;
+  /** Context path (e.g., "/payments") */
+  context?: string;
+  /** Target URL for egress gateway */
+  target?: string;
+  /** Single policy (egress gateway) */
+  policy?: string;
+  /** Endpoint types exposed by this gateway */
+  exposes: EndpointType[];
+  /** Security/governance policies applied at gateway */
+  policies: string[];
+  /** Authentication configuration */
+  auth?: AuthConfig;
+  /** Routes mapping paths to components */
+  routes: RouteDefinition[];
 }
 
 // ============================================
 // Component Definitions
 // ============================================
+
+/** Environment variable for component (new CellDL syntax) */
+export interface EnvVar extends BaseNode {
+  type: 'EnvVar';
+  key: string;
+  value: string;
+}
+
+/** Attribute value types */
+export type AttributeValue = string | number | boolean | string[];
 
 /** Component within a cell */
 export interface ComponentDefinition extends BaseNode {
@@ -194,6 +252,18 @@ export interface ComponentDefinition extends BaseNode {
   id: string;
   /** Type of component */
   componentType: ComponentType;
+  /** Docker image source (new CellDL syntax) */
+  source?: string;
+  /** Port number */
+  port?: number;
+  /** Database engine (for database components) */
+  engine?: string;
+  /** Storage type (for database components) */
+  storage?: string;
+  /** Version string (for database components) */
+  version?: string;
+  /** Environment variables (new CellDL syntax) */
+  env: EnvVar[];
   /** Key-value attributes (tech, replicas, etc.) */
   attributes: Record<string, AttributeValue>;
   /** Attached sidecars */
@@ -213,11 +283,32 @@ export interface ClusterDefinition extends BaseNode {
   components: ComponentDefinition[];
 }
 
-/** Attribute value types */
-export type AttributeValue = string | number | boolean | string[];
+// ============================================
+// Flow Definitions (New CellDL Syntax)
+// ============================================
+
+/** Single flow connection (source -> destination) */
+export interface FlowConnection extends BaseNode {
+  type: 'FlowConnection';
+  /** Source reference (e.g., "PaymentCell.payment-api") */
+  source: string;
+  /** Destination reference */
+  destination: string;
+  /** Optional label */
+  label?: string;
+}
+
+/** Flow block containing traffic patterns */
+export interface FlowDefinition extends BaseNode {
+  type: 'FlowDefinition';
+  /** Flow name/identifier */
+  name?: string;
+  /** Flow connections */
+  flows: FlowConnection[];
+}
 
 // ============================================
-// Connection Definitions
+// Connection Definitions (Legacy Syntax)
 // ============================================
 
 /** Internal connection between components within a cell */
@@ -227,6 +318,8 @@ export interface InternalConnection extends BaseNode {
   source: string;
   /** Target component ID */
   target: string;
+  /** Optional label */
+  label?: string;
 }
 
 /** Block of inter-cell/external connections */
@@ -333,6 +426,10 @@ export function isApplicationDefinition(node: Statement): node is ApplicationDef
 
 export function isConnectionsBlock(node: Statement): node is ConnectionsBlock {
   return node.type === 'ConnectionsBlock';
+}
+
+export function isFlowDefinition(node: Statement): node is FlowDefinition {
+  return node.type === 'FlowDefinition';
 }
 
 export function isClusterDefinition(

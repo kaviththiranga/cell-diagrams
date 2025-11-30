@@ -17,6 +17,9 @@ import type {
   Connection,
   ComponentDefinition,
   ClusterDefinition,
+  FlowDefinition,
+  FlowConnection,
+  GatewayDefinition,
 } from '@cell-diagrams/core';
 import type {
   DiagramNode,
@@ -246,6 +249,9 @@ export function astToDiagram(ast: Program): DiagramState {
       case 'ConnectionsBlock':
         edges.push(...connectionsBlockToEdges(stmt));
         break;
+      case 'FlowDefinition':
+        edges.push(...flowDefinitionToEdges(stmt));
+        break;
     }
   }
 
@@ -309,27 +315,39 @@ function cellToNodes(
   const cellWidth = cellSize;
   const cellHeight = cellSize;
 
+  // Get primary gateway (first ingress gateway or legacy gateway)
+  const primaryGateway = cell.gateways.find(gw => gw.direction === 'ingress') ?? cell.gateway;
+
+  // Collect all internal connections from both legacy connections and flow definitions
+  const allInternalConnections = [
+    ...cell.connections.map((conn) => ({
+      source: conn.source,
+      target: conn.target,
+    })),
+    ...cell.flows.flatMap((flow) => flow.flows.map((f) => ({
+      source: f.source,
+      target: f.destination,
+    }))),
+  ];
+
   // Create cell boundary node
   const cellData: CellNodeData = {
     type: 'cell',
     id: cell.id,
     label: cell.label ?? cell.id,
     cellType: cell.cellType,
-    gateway: cell.gateway
+    gateway: primaryGateway
       ? {
-          id: cell.gateway.id,
-          exposes: cell.gateway.exposes,
-          policies: cell.gateway.policies,
-          hasAuth: !!cell.gateway.auth,
-          authType: cell.gateway.auth?.authType,
+          id: primaryGateway.id,
+          exposes: primaryGateway.exposes,
+          policies: primaryGateway.policies,
+          hasAuth: !!primaryGateway.auth,
+          authType: primaryGateway.auth?.authType,
         }
       : undefined,
     components: allComponents.map(componentToNodeData),
     clusters: clusters.map(clusterToNodeData),
-    internalConnections: cell.connections.map((conn) => ({
-      source: conn.source,
-      target: conn.target,
-    })),
+    internalConnections: allInternalConnections,
     width: cellWidth,
     height: cellHeight,
   };
@@ -343,32 +361,50 @@ function cellToNodes(
     zIndex: -1,
   } as DiagramNode);
 
-  // Create gateway node if present - positioned ON the cell boundary
+  // Create gateway nodes - positioned ON the cell boundary
   // Gateways are NOT children of the cell so they can overlap the boundary
-  if (cell.gateway) {
-    // Determine gateway position - default to north (top), but can be overridden
-    const gatewayPosition: GatewayPosition = (cell.gateway.position as GatewayPosition) ?? 'north';
+  // Support multiple gateways (ingress/egress) at different positions
+  const allGateways: GatewayDefinition[] = [...cell.gateways];
+  if (cell.gateway && !cell.gateways.some(gw => gw.id === cell.gateway!.id)) {
+    allGateways.push(cell.gateway);
+  }
 
-    // Determine gateway type from label or position
+  for (const gateway of allGateways) {
+    // Determine gateway position based on direction or explicit position
+    // ingress defaults to north, egress defaults to south
+    let gatewayPosition: GatewayPosition;
+    if (gateway.position) {
+      gatewayPosition = gateway.position;
+    } else if (gateway.direction === 'egress') {
+      gatewayPosition = 'south';
+    } else {
+      gatewayPosition = 'north';
+    }
+
+    // Determine gateway type from direction or label
     let gatewayType: 'external' | 'internal' | 'egress' = 'external';
-    const labelLower = (cell.gateway.label ?? '').toLowerCase();
-    if (labelLower.includes('internal') || gatewayPosition === 'west') {
-      gatewayType = 'internal';
-    } else if (labelLower.includes('egress') || gatewayPosition === 'south') {
+    if (gateway.direction === 'egress') {
       gatewayType = 'egress';
+    } else {
+      const labelLower = (gateway.label ?? '').toLowerCase();
+      if (labelLower.includes('internal') || gatewayPosition === 'west') {
+        gatewayType = 'internal';
+      } else if (labelLower.includes('egress') || gatewayPosition === 'south') {
+        gatewayType = 'egress';
+      }
     }
 
     const gatewayData: GatewayNodeDataType = {
       type: 'gateway',
-      id: cell.gateway.id,
-      label: cell.gateway.label ?? cell.gateway.id,
+      id: gateway.id,
+      label: gateway.label ?? gateway.id,
       gatewayType,
       position: gatewayPosition,
       parentCell: cell.id,
-      exposes: cell.gateway.exposes,
-      policies: cell.gateway.policies ?? [],
-      hasAuth: !!cell.gateway.auth,
-      ...(cell.gateway.auth?.authType ? { authType: cell.gateway.auth.authType } : {}),
+      exposes: gateway.exposes,
+      policies: gateway.policies ?? [],
+      hasAuth: !!gateway.auth,
+      ...(gateway.auth?.authType ? { authType: gateway.auth.authType } : {}),
     };
 
     // Calculate position on cell boundary based on gateway position
@@ -396,8 +432,11 @@ function cellToNodes(
         break;
     }
 
+    // Use a unique ID for each gateway
+    const gatewayNodeId = gateway.id === 'gateway' ? `${cell.id}.gateway` : `${cell.id}.${gateway.id}`;
+
     nodes.push({
-      id: `${cell.id}.gateway`,
+      id: gatewayNodeId,
       type: 'gateway',
       position: { x: gwX, y: gwY },
       data: gatewayData,
@@ -455,7 +494,7 @@ function cellToNodes(
   }
 
   // Create edges for internal connections - use smoothstep for curvy edges
-  for (const conn of cell.connections) {
+  for (const conn of allInternalConnections) {
     edges.push({
       id: `${cell.id}.${conn.source}-${conn.target}`,
       source: `${cell.id}.${conn.source}`,
@@ -476,6 +515,30 @@ function cellToNodes(
         color: '#868e96',
       },
     });
+  }
+
+  // Process nested cells recursively
+  let nestedCellIndex = 0;
+  for (const nestedCell of cell.nestedCells) {
+    const nestedResult = cellToNodes(nestedCell, nestedCellIndex);
+    // Add nested cell nodes with parent reference
+    for (const nestedNode of nestedResult.nodes) {
+      if (nestedNode.type === 'cell') {
+        // Position nested cells inside parent cell
+        const nestedX = CELL_PADDING + nestedCellIndex * 320;
+        const nestedY = cellHeight - 200;
+        nodes.push({
+          ...nestedNode,
+          position: { x: nestedX, y: nestedY },
+          parentId: cell.id,
+          extent: 'parent',
+        } as DiagramNode);
+      } else {
+        nodes.push(nestedNode);
+      }
+    }
+    edges.push(...nestedResult.edges);
+    nestedCellIndex++;
   }
 
   return { nodes, edges };
@@ -583,6 +646,37 @@ function applicationToNode(app: ApplicationDefinition): DiagramNode {
  */
 function connectionsBlockToEdges(block: ConnectionsBlock): DiagramEdge[] {
   return block.connections.map(connectionToEdge);
+}
+
+/**
+ * Convert a FlowDefinition to React Flow edges.
+ * Handles top-level flow blocks for inter-cell connections.
+ */
+function flowDefinitionToEdges(flow: FlowDefinition): DiagramEdge[] {
+  return flow.flows.map((flowConn: FlowConnection) => {
+    const data: ConnectionEdgeData = {
+      direction: undefined,
+      label: flowConn.label,
+      via: undefined,
+      protocol: undefined,
+      attributes: {},
+    };
+
+    return {
+      id: `flow-${flowConn.source}-${flowConn.destination}`,
+      source: flowConn.source,
+      target: flowConn.destination,
+      type: 'connection',
+      style: { stroke: '#868e96', strokeWidth: 1.5 },
+      data,
+      markerEnd: {
+        type: 'arrowclosed' as MarkerType,
+        width: 15,
+        height: 15,
+        color: '#868e96',
+      },
+    };
+  });
 }
 
 /**
