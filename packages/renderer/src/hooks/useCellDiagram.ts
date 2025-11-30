@@ -6,12 +6,13 @@
 
 import { useMemo } from 'react';
 import { parse } from '@cell-diagrams/core';
-import { astToDiagram, applyLayout } from '../converter';
-import type { DiagramState, LayoutOptions } from '../types';
+import { astToDiagram, applyLayoutWithEngine } from '../converter';
+import type { DiagramState } from '../types';
+import type { LayoutEngineOptions } from '../layout';
 
 export interface UseCellDiagramOptions {
   source?: string;
-  layoutOptions?: LayoutOptions;
+  layoutOptions?: Partial<LayoutEngineOptions> | undefined;
 }
 
 export interface UseCellDiagramResult {
@@ -63,8 +64,8 @@ export function useCellDiagram(options: UseCellDiagramOptions): UseCellDiagramRe
     // Convert AST to diagram
     const diagram = astToDiagram(parseResult.ast);
 
-    // Apply three-zone layout
-    const layoutedDiagram = applyLayout(diagram, layoutOptions);
+    // Apply three-zone layout using the new LayoutEngine
+    const layoutedDiagram = applyLayoutWithEngine(diagram, layoutOptions ?? {});
 
     return {
       diagram: layoutedDiagram,

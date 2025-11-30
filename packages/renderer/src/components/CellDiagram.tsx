@@ -22,7 +22,6 @@ import { nodeTypes } from '../nodes';
 import { edgeTypes } from '../edges';
 import { useCellDiagram } from '../hooks/useCellDiagram';
 import type { CellDiagramProps, DiagramNodeData, ConnectionEdgeData } from '../types';
-import { defaultLayoutOptions } from '../types';
 
 import '@xyflow/react/dist/style.css';
 
@@ -36,7 +35,7 @@ export function CellDiagram({
 }: CellDiagramProps) {
   const { diagram, success, errors } = useCellDiagram({
     source,
-    layoutOptions: layoutOptions ?? defaultLayoutOptions,
+    layoutOptions,
   });
 
   const [nodes, setNodes, onNodesChange] = useNodesState(diagram.nodes);

@@ -15,6 +15,7 @@ import type {
   UserType,
   AttributeValue,
 } from '@cell-diagrams/core';
+import type { LayoutEngineOptions } from './layout';
 
 // ============================================
 // Node Data Types
@@ -167,8 +168,8 @@ export const defaultLayoutOptions: Required<LayoutOptions> = {
 export interface CellDiagramProps {
   /** The source code to render */
   source?: string;
-  /** Layout options */
-  layoutOptions?: LayoutOptions;
+  /** Layout options for the new LayoutEngine */
+  layoutOptions?: Partial<LayoutEngineOptions>;
   /** Callback when a node is clicked */
   onNodeClick?: (nodeId: string, nodeData: DiagramNodeData) => void;
   /** Callback when an edge is clicked */

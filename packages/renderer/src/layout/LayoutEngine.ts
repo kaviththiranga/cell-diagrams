@@ -17,6 +17,7 @@ import type {
   LayoutNode,
   LayoutEdge,
   ILayoutEngine,
+  ExternalLayoutData,
 } from './types';
 import { DEFAULT_LAYOUT_OPTIONS } from './types';
 
@@ -83,7 +84,7 @@ export class LayoutEngine implements ILayoutEngine {
   /**
    * Perform complete layout on diagram data using three-zone approach:
    * - Header Zone: Users and externals connecting TO cells (northbound)
-   * - Middle Zone: Cells arranged horizontally
+   * - Middle Zone: Cells arranged HORIZONTALLY
    * - Bottom Zone: Externals that cells connect TO (southbound)
    */
   layout(diagram: DiagramLayoutData): LayoutResult {
@@ -94,7 +95,7 @@ export class LayoutEngine implements ILayoutEngine {
       bounds: { minX: 0, minY: 0, maxX: 0, maxY: 0 },
     };
 
-    const { padding } = { padding: 50 }; // Default padding
+    const padding = 50;
 
     // 1. Layout each cell's internal components to get dimensions
     const cellResults = new Map<string, CellLayoutResult>();
@@ -104,41 +105,69 @@ export class LayoutEngine implements ILayoutEngine {
       result.cellDimensions.set(cell.id, cellResult.dimensions);
     });
 
-    // 2. Layout cells relative to each other using Dagre (at origin first)
-    const cellNodes: LayoutNode[] = diagram.cells.map((cell) => {
-      const dims = result.cellDimensions.get(cell.id)!;
-      return {
-        id: cell.id,
-        width: dims.width,
-        height: dims.height,
-      };
-    });
-
-    const relativeCellPositions = this.layoutCells(
-      cellNodes,
-      diagram.interCellConnections
-    );
-
-    // 3. Calculate header zone height based on externals
+    // 2. Categorize externals into header (northbound) vs bottom (southbound)
     const cellIds = new Set(diagram.cells.map(c => c.id));
-    const headerNodes = diagram.externals.filter(ext => {
+    const headerNodes: ExternalLayoutData[] = [];
+    const bottomNodes: ExternalLayoutData[] = [];
+
+    for (const ext of diagram.externals) {
       // Users always go to header
-      if (ext.type === 'user') return true;
+      if (ext.type === 'user') {
+        headerNodes.push(ext);
+        continue;
+      }
 
-      // Check if external connects TO a cell (northbound)
-      const conn = diagram.connections.find(c =>
-        c.source === ext.id || c.target === ext.id
-      );
-      if (!conn) return true; // Default to header if no connection
+      // Find connections involving this external
+      let isNorthbound = false;
+      let isSouthbound = false;
 
-      const connData = conn.data as { direction?: string } | undefined;
-      return connData?.direction === 'northbound' ||
-             (conn.source === ext.id && cellIds.has(conn.target.split('.')[0] ?? ''));
-    });
+      for (const conn of diagram.connections) {
+        const connData = conn.data as { direction?: string } | undefined;
+        const direction = connData?.direction;
 
-    const bottomNodes = diagram.externals.filter(ext => !headerNodes.includes(ext));
+        // External is source
+        if (conn.source === ext.id) {
+          const targetBase = conn.target.split('.')[0] ?? '';
+          if (cellIds.has(targetBase)) {
+            // External -> Cell: northbound means external is above cell
+            if (direction === 'northbound') {
+              isNorthbound = true;
+            } else if (direction === 'southbound') {
+              isSouthbound = true;
+            } else {
+              // No direction specified, default to header if connecting to cell
+              isNorthbound = true;
+            }
+          }
+        }
 
-    // Calculate header zone dimensions
+        // External is target
+        if (conn.target === ext.id) {
+          const sourceBase = conn.source.split('.')[0] ?? '';
+          if (cellIds.has(sourceBase)) {
+            // Cell -> External: southbound means external is below cell
+            if (direction === 'southbound') {
+              isSouthbound = true;
+            } else if (direction === 'northbound') {
+              isNorthbound = true;
+            } else {
+              // No direction specified, default to bottom if cell connects to external
+              isSouthbound = true;
+            }
+          }
+        }
+      }
+
+      // Categorize based on analysis
+      if (isSouthbound && !isNorthbound) {
+        bottomNodes.push(ext);
+      } else {
+        // Default to header for externals
+        headerNodes.push(ext);
+      }
+    }
+
+    // 3. Calculate header zone dimensions
     const headerHeight = headerNodes.length > 0
       ? Math.max(...headerNodes.map(n => n.height || 100))
       : 0;
@@ -146,30 +175,28 @@ export class LayoutEngine implements ILayoutEngine {
       ? padding + headerHeight + this.options.externalOffset
       : padding;
 
-    // 4. Offset cell positions to start after header zone
-    const cellBounds = this.getBounds(relativeCellPositions, cellNodes);
-    const cellOffsetX = padding - cellBounds.minX;
-    const cellOffsetY = headerZoneBottom - cellBounds.minY;
-
+    // 4. Arrange cells HORIZONTALLY in the middle zone
     const cellPositions = new Map<string, Position>();
-    relativeCellPositions.forEach((pos, id) => {
-      cellPositions.set(id, {
-        x: pos.x + cellOffsetX,
-        y: pos.y + cellOffsetY,
-      });
-    });
+    let cellX = padding;
+    const cellY = headerZoneBottom;
+
+    for (const cell of diagram.cells) {
+      const dims = result.cellDimensions.get(cell.id)!;
+      cellPositions.set(cell.id, { x: cellX, y: cellY });
+      cellX += dims.width + this.options.nodeSpacing;
+    }
 
     // 5. Store cell positions and internal components
     cellPositions.forEach((cellPos, cellId) => {
+      const dims = result.cellDimensions.get(cellId)!;
       result.nodes.set(cellId, {
         ...cellPos,
-        width: result.cellDimensions.get(cellId)!.width,
-        height: result.cellDimensions.get(cellId)!.height,
+        width: dims.width,
+        height: dims.height,
       });
 
       const cellResult = cellResults.get(cellId);
       if (cellResult) {
-        const dims = result.cellDimensions.get(cellId)!;
         cellResult.nodePositions.forEach((compPos, compId) => {
           result.nodes.set(compId, {
             x: cellPos.x + dims.contentOffset.x + compPos.x,
@@ -311,30 +338,6 @@ export class LayoutEngine implements ILayoutEngine {
     const bounds = this.getBounds(nodePositions, components);
 
     return { nodePositions, dimensions, bounds };
-  }
-
-  /**
-   * Layout cells relative to each other
-   */
-  private layoutCells(
-    cells: LayoutNode[],
-    interCellConnections: LayoutEdge[]
-  ): Map<string, Position> {
-    if (cells.length === 0) {
-      return new Map();
-    }
-
-    if (cells.length === 1) {
-      // Single cell, center it
-      return new Map([[cells[0]!.id, { x: 0, y: 0 }]]);
-    }
-
-    // Use Dagre for cell layout
-    return this.dagreAdapter.layout(cells, interCellConnections, {
-      ...this.options,
-      nodeSpacing: this.options.nodeSpacing * 2, // More spacing between cells
-      rankSpacing: this.options.rankSpacing * 2,
-    });
   }
 
   /**
