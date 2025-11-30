@@ -251,96 +251,228 @@ export function registerCellDiagramsLanguage(monaco: typeof Monaco): void {
 
 /**
  * Default Cell Diagrams sample code (Cell-Based Architecture)
+ * Tests three-zone layout: Header (northbound) -> Middle (cells) -> Bottom (southbound)
  */
 export const defaultSampleCode = `// Cell-Based Architecture Example
-// Based on reference diagram
+// Testing Three-Zone Layout with Multiple Cells and External Services
 
-diagram ProjectExample {
+diagram ECommerceSystem {
 
-  // User accessing the system
-  user EndUser {
+  // ============================================
+  // HEADER ZONE: Users and northbound externals
+  // ============================================
+
+  // Users accessing the system
+  user WebUser {
     type: external
   }
 
-  // Frontend SPA
-  external FrontendSPA {
-    label: "Frontend SPA"
+  user MobileUser {
+    type: external
+  }
+
+  user AdminUser {
+    type: internal
+  }
+
+  // Frontend applications (connect northbound to cells)
+  external WebApp {
+    label: "Web Application"
     type: enterprise
     provides: [api]
   }
 
-  // Project Foo Cell (Left cell)
-  cell ProjectFoo {
-    label: "Project Foo"
+  external MobileApp {
+    label: "Mobile App"
+    type: enterprise
+    provides: [api]
+  }
+
+  external AdminPortal {
+    label: "Admin Portal"
+    type: enterprise
+    provides: [api]
+  }
+
+  // ============================================
+  // MIDDLE ZONE: Cells arranged horizontally
+  // ============================================
+
+  // User Management Cell
+  cell UserCell {
+    label: "User Management"
     type: logic
 
     gateway {
-      label: "External gateway"
+      label: "User API Gateway"
       exposes: [api]
     }
 
     components {
-      microservice ComponentX
-      microservice ComponentY
-      microservice ComponentZ
-      database DB1 [tech: "PostgreSQL"]
+      microservice AuthService
+      microservice ProfileService
+      database UserDB [tech: "PostgreSQL"]
+      cache SessionCache [tech: "Redis"]
     }
 
-    // Internal connections
     connections {
-      ComponentX -> ComponentY
-      ComponentX -> ComponentZ
-      ComponentY -> DB1
+      AuthService -> UserDB
+      AuthService -> SessionCache
+      ProfileService -> UserDB
     }
   }
 
-  // Project Bar Cell (Right cell with multiple gateways)
-  cell ProjectBar {
-    label: "Project Bar"
+  // Product Catalog Cell
+  cell ProductCell {
+    label: "Product Catalog"
     type: logic
 
     gateway {
-      label: "Internal gateway"
+      label: "Product API Gateway"
       exposes: [api]
     }
 
     components {
-      microservice ComponentA
-      microservice ComponentB
-      database DB2 [tech: "PostgreSQL"]
-      legacy LegacyService
-      adapter Adapter
+      microservice CatalogService
+      microservice SearchService
+      microservice InventoryService
+      database ProductDB [tech: "PostgreSQL"]
+      cache ProductCache [tech: "Redis"]
     }
 
-    // Internal connections
     connections {
-      ComponentA -> ComponentB
-      ComponentB -> DB2
-      LegacyService -> Adapter
-      Adapter -> ComponentB
+      CatalogService -> ProductDB
+      CatalogService -> ProductCache
+      SearchService -> ProductCache
+      InventoryService -> ProductDB
     }
   }
 
-  // External third-party service
-  external ThirdParty {
-    label: "Third-party service (external)"
+  // Order Processing Cell
+  cell OrderCell {
+    label: "Order Processing"
+    type: logic
+
+    gateway {
+      label: "Order API Gateway"
+      exposes: [api]
+    }
+
+    components {
+      microservice OrderService
+      microservice CartService
+      microservice CheckoutService
+      database OrderDB [tech: "PostgreSQL"]
+      broker OrderQueue [tech: "RabbitMQ"]
+    }
+
+    connections {
+      CartService -> OrderService
+      OrderService -> OrderDB
+      CheckoutService -> OrderService
+      CheckoutService -> OrderQueue
+    }
+  }
+
+  // Notification Cell
+  cell NotificationCell {
+    label: "Notifications"
+    type: logic
+
+    gateway {
+      label: "Notification Gateway"
+      exposes: [api]
+    }
+
+    components {
+      microservice EmailService
+      microservice PushService
+      microservice SMSService
+      broker NotificationQueue [tech: "RabbitMQ"]
+    }
+
+    connections {
+      NotificationQueue -> EmailService
+      NotificationQueue -> PushService
+      NotificationQueue -> SMSService
+    }
+  }
+
+  // ============================================
+  // BOTTOM ZONE: Southbound external services
+  // ============================================
+
+  // Payment providers (cells connect southbound)
+  external StripeAPI {
+    label: "Stripe Payment"
     type: saas
     provides: [api]
   }
 
-  // Inter-cell and external connections
+  external PayPalAPI {
+    label: "PayPal"
+    type: saas
+    provides: [api]
+  }
+
+  // Email/SMS providers
+  external SendGrid {
+    label: "SendGrid Email"
+    type: saas
+    provides: [api]
+  }
+
+  external TwilioAPI {
+    label: "Twilio SMS"
+    type: saas
+    provides: [api]
+  }
+
+  // Shipping providers
+  external ShippingAPI {
+    label: "Shipping Provider"
+    type: saas
+    provides: [api]
+  }
+
+  // Analytics
+  external AnalyticsAPI {
+    label: "Analytics Platform"
+    type: saas
+    provides: [api]
+  }
+
+  // ============================================
+  // CONNECTIONS
+  // ============================================
   connections {
-    // User to Frontend
-    EndUser -> FrontendSPA
+    // User to Frontend (header connections)
+    WebUser -> WebApp
+    MobileUser -> MobileApp
+    AdminUser -> AdminPortal
 
-    // Frontend to Cell via gateway
-    FrontendSPA -> ProjectFoo [northbound]
+    // Frontend to Cells (northbound - places frontends in header)
+    WebApp -> UserCell [northbound]
+    WebApp -> ProductCell [northbound]
+    WebApp -> OrderCell [northbound]
+    MobileApp -> UserCell [northbound]
+    MobileApp -> ProductCell [northbound]
+    MobileApp -> OrderCell [northbound]
+    AdminPortal -> UserCell [northbound]
+    AdminPortal -> NotificationCell [northbound]
 
-    // Cell to Cell (eastbound)
-    ProjectFoo.ComponentY -> ProjectBar [eastbound]
+    // Cell to Cell (eastbound - horizontal connections)
+    UserCell -> ProductCell [eastbound]
+    ProductCell -> OrderCell [eastbound]
+    OrderCell -> NotificationCell [eastbound]
 
-    // Cell to external (southbound)
-    ProjectBar -> ThirdParty [southbound]
+    // Cell to External Services (southbound - places externals in bottom)
+    OrderCell -> StripeAPI [southbound]
+    OrderCell -> PayPalAPI [southbound]
+    OrderCell -> ShippingAPI [southbound]
+    NotificationCell -> SendGrid [southbound]
+    NotificationCell -> TwilioAPI [southbound]
+    ProductCell -> AnalyticsAPI [southbound]
   }
 
 }
