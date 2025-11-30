@@ -1,0 +1,248 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Cell Diagrams",
+  "scopeName": "source.cell-diagrams",
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#cell-definition" },
+    { "include": "#external-definition" },
+    { "include": "#user-definition" },
+    { "include": "#connection" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.cell-diagrams",
+          "match": "//.*$"
+        },
+        {
+          "name": "comment.block.cell-diagrams",
+          "begin": "/\\*",
+          "end": "\\*/",
+          "captures": {
+            "0": { "name": "punctuation.definition.comment.cell-diagrams" }
+          }
+        }
+      ]
+    },
+    "cell-definition": {
+      "begin": "\\b(cell)\\s+([a-zA-Z_][a-zA-Z0-9_-]*)\\s*(\\{)",
+      "beginCaptures": {
+        "1": { "name": "keyword.control.cell.cell-diagrams" },
+        "2": { "name": "entity.name.type.cell.cell-diagrams" },
+        "3": { "name": "punctuation.definition.block.begin.cell-diagrams" }
+      },
+      "end": "(\\})",
+      "endCaptures": {
+        "1": { "name": "punctuation.definition.block.end.cell-diagrams" }
+      },
+      "patterns": [
+        { "include": "#comments" },
+        { "include": "#name-property" },
+        { "include": "#type-property" },
+        { "include": "#components-block" },
+        { "include": "#connect-block" },
+        { "include": "#expose-block" }
+      ]
+    },
+    "external-definition": {
+      "begin": "\\b(external)\\s+([a-zA-Z_][a-zA-Z0-9_-]*)\\s*(\\{)",
+      "beginCaptures": {
+        "1": { "name": "keyword.control.external.cell-diagrams" },
+        "2": { "name": "entity.name.type.external.cell-diagrams" },
+        "3": { "name": "punctuation.definition.block.begin.cell-diagrams" }
+      },
+      "end": "(\\})",
+      "endCaptures": {
+        "1": { "name": "punctuation.definition.block.end.cell-diagrams" }
+      },
+      "patterns": [
+        { "include": "#comments" },
+        { "include": "#name-property" },
+        { "include": "#type-property" }
+      ]
+    },
+    "user-definition": {
+      "match": "\\b(user)\\s+([a-zA-Z_][a-zA-Z0-9_-]*)",
+      "captures": {
+        "1": { "name": "keyword.control.user.cell-diagrams" },
+        "2": { "name": "entity.name.type.user.cell-diagrams" }
+      },
+      "patterns": [
+        { "include": "#attributes" }
+      ]
+    },
+    "connection": {
+      "match": "\\b(connect)\\s+([a-zA-Z_][a-zA-Z0-9_-]*)\\s*(->)\\s*([a-zA-Z_][a-zA-Z0-9_-]*)",
+      "captures": {
+        "1": { "name": "keyword.control.connect.cell-diagrams" },
+        "2": { "name": "variable.other.source.cell-diagrams" },
+        "3": { "name": "keyword.operator.arrow.cell-diagrams" },
+        "4": { "name": "variable.other.target.cell-diagrams" }
+      }
+    },
+    "name-property": {
+      "match": "\\b(name)\\s*(:)\\s*(\"[^\"]*\")",
+      "captures": {
+        "1": { "name": "variable.other.property.cell-diagrams" },
+        "2": { "name": "punctuation.separator.key-value.cell-diagrams" },
+        "3": { "name": "string.quoted.double.cell-diagrams" }
+      }
+    },
+    "type-property": {
+      "match": "\\b(type)\\s*(:)\\s*(logic|integration|legacy|data|security|channel|[a-zA-Z_][a-zA-Z0-9_-]*)",
+      "captures": {
+        "1": { "name": "variable.other.property.cell-diagrams" },
+        "2": { "name": "punctuation.separator.key-value.cell-diagrams" },
+        "3": { "name": "support.type.cell-type.cell-diagrams" }
+      }
+    },
+    "components-block": {
+      "begin": "\\b(components)\\s*(\\{)",
+      "beginCaptures": {
+        "1": { "name": "keyword.control.components.cell-diagrams" },
+        "2": { "name": "punctuation.definition.block.begin.cell-diagrams" }
+      },
+      "end": "(\\})",
+      "endCaptures": {
+        "1": { "name": "punctuation.definition.block.end.cell-diagrams" }
+      },
+      "patterns": [
+        { "include": "#comments" },
+        { "include": "#component-definition" }
+      ]
+    },
+    "component-definition": {
+      "match": "\\b(ms|fn|db|gw|svc|broker|cache|legacy|esb|idp)\\s+([a-zA-Z_][a-zA-Z0-9_-]*)",
+      "captures": {
+        "1": { "name": "support.type.component.cell-diagrams" },
+        "2": { "name": "entity.name.function.component.cell-diagrams" }
+      }
+    },
+    "connect-block": {
+      "begin": "\\b(connect)\\s*(\\{)",
+      "beginCaptures": {
+        "1": { "name": "keyword.control.connect.cell-diagrams" },
+        "2": { "name": "punctuation.definition.block.begin.cell-diagrams" }
+      },
+      "end": "(\\})",
+      "endCaptures": {
+        "1": { "name": "punctuation.definition.block.end.cell-diagrams" }
+      },
+      "patterns": [
+        { "include": "#comments" },
+        { "include": "#internal-connection" }
+      ]
+    },
+    "internal-connection": {
+      "match": "([a-zA-Z_][a-zA-Z0-9_-]*)\\s*(->)\\s*([a-zA-Z_][a-zA-Z0-9_-]*)",
+      "captures": {
+        "1": { "name": "variable.other.source.cell-diagrams" },
+        "2": { "name": "keyword.operator.arrow.cell-diagrams" },
+        "3": { "name": "variable.other.target.cell-diagrams" }
+      }
+    },
+    "expose-block": {
+      "begin": "\\b(expose)\\s*(\\{)",
+      "beginCaptures": {
+        "1": { "name": "keyword.control.expose.cell-diagrams" },
+        "2": { "name": "punctuation.definition.block.begin.cell-diagrams" }
+      },
+      "end": "(\\})",
+      "endCaptures": {
+        "1": { "name": "punctuation.definition.block.end.cell-diagrams" }
+      },
+      "patterns": [
+        { "include": "#comments" },
+        { "include": "#endpoint-definition" }
+      ]
+    },
+    "endpoint-definition": {
+      "match": "\\b(api|event|stream)\\s*(:)\\s*([a-zA-Z_][a-zA-Z0-9_-]*)",
+      "captures": {
+        "1": { "name": "support.type.endpoint.cell-diagrams" },
+        "2": { "name": "punctuation.separator.key-value.cell-diagrams" },
+        "3": { "name": "variable.other.component-ref.cell-diagrams" }
+      }
+    },
+    "attributes": {
+      "begin": "(\\[)",
+      "beginCaptures": {
+        "1": { "name": "punctuation.definition.attributes.begin.cell-diagrams" }
+      },
+      "end": "(\\])",
+      "endCaptures": {
+        "1": { "name": "punctuation.definition.attributes.end.cell-diagrams" }
+      },
+      "patterns": [
+        { "include": "#attribute" },
+        {
+          "match": ",",
+          "name": "punctuation.separator.comma.cell-diagrams"
+        }
+      ]
+    },
+    "attribute": {
+      "patterns": [
+        {
+          "match": "([a-zA-Z_][a-zA-Z0-9_-]*)\\s*(:)\\s*(\"[^\"]*\")",
+          "captures": {
+            "1": { "name": "entity.other.attribute-name.cell-diagrams" },
+            "2": { "name": "punctuation.separator.key-value.cell-diagrams" },
+            "3": { "name": "string.quoted.double.cell-diagrams" }
+          }
+        },
+        {
+          "match": "([a-zA-Z_][a-zA-Z0-9_-]*)\\s*(:)\\s*(-?\\d+(\\.\\d+)?)",
+          "captures": {
+            "1": { "name": "entity.other.attribute-name.cell-diagrams" },
+            "2": { "name": "punctuation.separator.key-value.cell-diagrams" },
+            "3": { "name": "constant.numeric.cell-diagrams" }
+          }
+        },
+        {
+          "match": "([a-zA-Z_][a-zA-Z0-9_-]*)\\s*(:)\\s*(true|false)",
+          "captures": {
+            "1": { "name": "entity.other.attribute-name.cell-diagrams" },
+            "2": { "name": "punctuation.separator.key-value.cell-diagrams" },
+            "3": { "name": "constant.language.boolean.cell-diagrams" }
+          }
+        },
+        {
+          "match": "([a-zA-Z_][a-zA-Z0-9_-]*)\\s*(:)\\s*([a-zA-Z_][a-zA-Z0-9_-]*)",
+          "captures": {
+            "1": { "name": "entity.other.attribute-name.cell-diagrams" },
+            "2": { "name": "punctuation.separator.key-value.cell-diagrams" },
+            "3": { "name": "variable.other.attribute-value.cell-diagrams" }
+          }
+        },
+        {
+          "match": "([a-zA-Z_][a-zA-Z0-9_-]*)",
+          "captures": {
+            "1": { "name": "entity.other.attribute-name.cell-diagrams" }
+          }
+        }
+      ]
+    },
+    "string": {
+      "name": "string.quoted.double.cell-diagrams",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [
+        {
+          "name": "constant.character.escape.cell-diagrams",
+          "match": "\\\\."
+        }
+      ]
+    },
+    "number": {
+      "name": "constant.numeric.cell-diagrams",
+      "match": "-?\\d+(\\.\\d+)?"
+    },
+    "boolean": {
+      "name": "constant.language.boolean.cell-diagrams",
+      "match": "\\b(true|false)\\b"
+    }
+  }
+}

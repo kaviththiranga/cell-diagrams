@@ -1,0 +1,151 @@
+{
+  "name": "cell-diagrams-vscode",
+  "displayName": "Cell Diagrams",
+  "description": "Cell-Based Architecture diagram support for VS Code",
+  "version": "0.1.0",
+  "publisher": "cell-diagrams",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Visualization"
+  ],
+  "keywords": [
+    "cell-diagrams",
+    "architecture",
+    "diagram",
+    "cell-based",
+    "dsl"
+  ],
+  "icon": "images/icon.png",
+  "galleryBanner": {
+    "color": "#4f46e5",
+    "theme": "dark"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-org/cell-diagrams",
+    "directory": "extensions/vscode"
+  },
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onLanguage:cell-diagrams"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "cell-diagrams",
+        "aliases": [
+          "Cell Diagrams",
+          "cell-diagrams",
+          "cell"
+        ],
+        "extensions": [
+          ".cell"
+        ],
+        "configuration": "./language-configuration.json",
+        "icon": {
+          "light": "./images/file-icon.svg",
+          "dark": "./images/file-icon.svg"
+        }
+      }
+    ],
+    "grammars": [
+      {
+        "language": "cell-diagrams",
+        "scopeName": "source.cell-diagrams",
+        "path": "./syntaxes/cell-diagrams.tmLanguage.json"
+      }
+    ],
+    "commands": [
+      {
+        "command": "cell-diagrams.showPreview",
+        "title": "Show Diagram Preview",
+        "category": "Cell Diagrams",
+        "icon": {
+          "light": "./images/preview-light.svg",
+          "dark": "./images/preview-dark.svg"
+        }
+      },
+      {
+        "command": "cell-diagrams.showPreviewToSide",
+        "title": "Show Diagram Preview to Side",
+        "category": "Cell Diagrams",
+        "icon": {
+          "light": "./images/preview-light.svg",
+          "dark": "./images/preview-dark.svg"
+        }
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "cell-diagrams.showPreviewToSide",
+          "when": "editorLangId == cell-diagrams",
+          "group": "navigation"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "cell-diagrams.showPreview",
+          "when": "editorLangId == cell-diagrams"
+        },
+        {
+          "command": "cell-diagrams.showPreviewToSide",
+          "when": "editorLangId == cell-diagrams"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "cell-diagrams.showPreviewToSide",
+        "key": "ctrl+k v",
+        "mac": "cmd+k v",
+        "when": "editorLangId == cell-diagrams"
+      }
+    ],
+    "configuration": {
+      "title": "Cell Diagrams",
+      "properties": {
+        "cellDiagrams.preview.autoRefresh": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically refresh the preview when the document changes"
+        },
+        "cellDiagrams.preview.refreshDelay": {
+          "type": "number",
+          "default": 300,
+          "description": "Delay in milliseconds before refreshing the preview after a change"
+        },
+        "cellDiagrams.diagram.direction": {
+          "type": "string",
+          "enum": [
+            "TB",
+            "BT",
+            "LR",
+            "RL"
+          ],
+          "default": "TB",
+          "description": "Default layout direction for diagrams"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "pnpm run build",
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "package": "vsce package --no-dependencies",
+    "clean": "rm -rf dist *.vsix"
+  },
+  "dependencies": {
+    "@cell-diagrams/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^3.2.2",
+    "tsup": "^8.2.0",
+    "typescript": "^5.5.0"
+  }
+}
