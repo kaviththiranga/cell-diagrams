@@ -13,8 +13,6 @@ import type {
   ExternalDefinition,
   UserDefinition,
   ApplicationDefinition,
-  ConnectionsBlock,
-  Connection,
   ComponentDefinition,
   ClusterDefinition,
   FlowDefinition,
@@ -246,9 +244,6 @@ export function astToDiagram(ast: Program): DiagramState {
       case 'ApplicationDefinition':
         nodes.push(applicationToNode(stmt));
         break;
-      case 'ConnectionsBlock':
-        edges.push(...connectionsBlockToEdges(stmt));
-        break;
       case 'FlowDefinition':
         edges.push(...flowDefinitionToEdges(stmt));
         break;
@@ -318,17 +313,11 @@ function cellToNodes(
   // Get primary gateway (first ingress gateway or legacy gateway)
   const primaryGateway = cell.gateways.find(gw => gw.direction === 'ingress') ?? cell.gateway;
 
-  // Collect all internal connections from both legacy connections and flow definitions
-  const allInternalConnections = [
-    ...cell.connections.map((conn) => ({
-      source: conn.source,
-      target: conn.target,
-    })),
-    ...cell.flows.flatMap((flow) => flow.flows.map((f) => ({
-      source: f.source,
-      target: f.destination,
-    }))),
-  ];
+  // Collect all internal connections from flow definitions
+  const allInternalConnections = cell.flows.flatMap((flow) => flow.flows.map((f) => ({
+    source: f.source,
+    target: f.destination,
+  })));
 
   // Create cell boundary node
   const cellData: CellNodeData = {
@@ -643,13 +632,6 @@ function applicationToNode(app: ApplicationDefinition): DiagramNode {
 }
 
 /**
- * Convert a ConnectionsBlock to React Flow edges.
- */
-function connectionsBlockToEdges(block: ConnectionsBlock): DiagramEdge[] {
-  return block.connections.map(connectionToEdge);
-}
-
-/**
  * Convert a FlowDefinition to React Flow edges.
  * Handles top-level flow blocks for inter-cell connections.
  */
@@ -678,99 +660,6 @@ function flowDefinitionToEdges(flow: FlowDefinition): DiagramEdge[] {
       },
     };
   });
-}
-
-/**
- * Convert a Connection to a React Flow edge.
- */
-function connectionToEdge(conn: Connection): DiagramEdge {
-  // Extract common attributes
-  const label = conn.attributes['label'];
-  const via = conn.attributes['via'];
-  const protocol = conn.attributes['protocol'];
-
-  const data: ConnectionEdgeData = {
-    direction: conn.direction,
-    label: typeof label === 'string' ? label : undefined,
-    via: typeof via === 'string' ? via : undefined,
-    protocol: typeof protocol === 'string' ? protocol : undefined,
-    attributes: conn.attributes,
-  };
-
-  // Build source/target IDs
-  // If component is specified, point to the component node
-  const sourceId = conn.source.component
-    ? `${conn.source.entity}.${conn.source.component}`
-    : conn.source.entity;
-  const targetId = conn.target.component
-    ? `${conn.target.entity}.${conn.target.component}`
-    : conn.target.entity;
-
-  // Determine if this is an inter-cell connection
-  // Inter-cell: source and target entities are different (and both are cells)
-  const sourceEntity = conn.source.entity;
-  const targetEntity = conn.target.entity;
-  const isInterCell = sourceEntity !== targetEntity;
-
-  // Determine handle IDs based on direction
-  // Direction indicates how traffic flows from the source's perspective:
-  // - northbound: from south to north (source uses bottom, target uses top)
-  // - southbound: from north to south (source uses bottom, target uses top)
-  // - eastbound: from west to east (source uses right, target uses left)
-  // - westbound: from east to west (source uses left, target uses right)
-  let sourceHandle: string | null = null;
-  let targetHandle: string | null = null;
-
-  switch (conn.direction) {
-    case 'northbound':
-      sourceHandle = 'bottom';
-      targetHandle = 'top';
-      break;
-    case 'southbound':
-      sourceHandle = 'bottom';
-      targetHandle = 'top';
-      break;
-    case 'eastbound':
-      sourceHandle = 'right';
-      targetHandle = 'left';
-      break;
-    case 'westbound':
-      sourceHandle = 'left';
-      targetHandle = 'right';
-      break;
-    default:
-      // No direction specified - let React Flow auto-determine
-      sourceHandle = null;
-      targetHandle = null;
-  }
-
-  // Determine edge style based on direction
-  const isDotted = !conn.direction || conn.direction === 'westbound';
-
-  // Use step edge type (straight lines with right angles) for inter-cell connections
-  // Use straight edge type for all other connections (external-to-cell, cell-to-external, etc.)
-  const edgeType = isInterCell ? 'step' : 'straight';
-
-  return {
-    id: `${sourceId}-${targetId}`,
-    source: sourceId,
-    target: targetId,
-    sourceHandle,
-    targetHandle,
-    type: edgeType,
-    style: {
-      stroke: '#868e96',
-      strokeWidth: 1.5,
-      strokeDasharray: isDotted ? '5,5' : undefined,
-    },
-    data,
-    markerEnd: {
-      type: 'arrowclosed' as MarkerType,
-      width: 15,
-      height: 15,
-      color: '#868e96',
-    },
-  };
 }
 
 // ============================================

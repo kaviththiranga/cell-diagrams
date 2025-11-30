@@ -14,7 +14,6 @@ import {
   CellDefinition,
   ComponentDefinition,
   ClusterDefinition,
-  InternalConnection,
   GatewayDefinition,
   GatewayDirection,
   RouteDefinition,
@@ -23,9 +22,6 @@ import {
   ExternalDefinition,
   UserDefinition,
   ApplicationDefinition,
-  Connection,
-  ConnectionsBlock,
-  ConnectionEndpoint,
   FlowDefinition,
   FlowConnection,
   ComponentType,
@@ -33,7 +29,6 @@ import {
   EndpointType,
   ExternalType,
   UserType,
-  ConnectionDirection,
   AuthType,
   AttributeValue,
   COMPONENT_TYPE_ALIAS_MAP,
@@ -260,14 +255,12 @@ class CellDiagramsVisitor extends BaseCstVisitor {
     externalDefinition?: CstNode[];
     userDefinition?: CstNode[];
     applicationDefinition?: CstNode[];
-    connectionsBlock?: CstNode[];
     flowBlock?: CstNode[];
   }): Statement | null {
     if (ctx.cellDefinition?.[0]) return this.visit(ctx.cellDefinition[0]) as CellDefinition;
     if (ctx.externalDefinition?.[0]) return this.visit(ctx.externalDefinition[0]) as ExternalDefinition;
     if (ctx.userDefinition?.[0]) return this.visit(ctx.userDefinition[0]) as UserDefinition;
     if (ctx.applicationDefinition?.[0]) return this.visit(ctx.applicationDefinition[0]) as ApplicationDefinition;
-    if (ctx.connectionsBlock?.[0]) return this.visit(ctx.connectionsBlock[0]) as ConnectionsBlock;
     if (ctx.flowBlock?.[0]) return this.visit(ctx.flowBlock[0]) as FlowDefinition;
     return null;
   }
@@ -292,7 +285,6 @@ class CellDiagramsVisitor extends BaseCstVisitor {
     let gateway: GatewayDefinition | undefined;
     const gateways: GatewayDefinition[] = [];
     const components: (ComponentDefinition | ClusterDefinition)[] = [];
-    const connections: InternalConnection[] = [];
     const flows: FlowDefinition[] = [];
     const nestedCells: CellDefinition[] = [];
 
@@ -333,9 +325,6 @@ class CellDiagramsVisitor extends BaseCstVisitor {
             case 'cluster':
               components.push(result.value as ClusterDefinition);
               break;
-            case 'connections':
-              connections.push(...(result.value as InternalConnection[]));
-              break;
             case 'flow':
               flows.push(result.value as FlowDefinition);
               break;
@@ -357,7 +346,6 @@ class CellDiagramsVisitor extends BaseCstVisitor {
       ...(gateway && { gateway }),
       gateways,
       components,
-      connections,
       flows,
       nestedCells,
     };
@@ -375,7 +363,6 @@ class CellDiagramsVisitor extends BaseCstVisitor {
     functionBlock?: CstNode[];
     legacyBlock?: CstNode[];
     clusterDefinition?: CstNode[];
-    connectionsBlock?: CstNode[];
     flowBlock?: CstNode[];
     nestedCell?: CstNode[];
   }): { _type: string; value: unknown } | null {
@@ -411,15 +398,6 @@ class CellDiagramsVisitor extends BaseCstVisitor {
     }
     if (ctx.clusterDefinition?.[0]) {
       return { _type: 'cluster', value: this.visit(ctx.clusterDefinition[0]) };
-    }
-    if (ctx.connectionsBlock?.[0]) {
-      const connectionsBlock = this.visit(ctx.connectionsBlock[0]) as ConnectionsBlock;
-      const internalConns: InternalConnection[] = connectionsBlock.connections.map(conn => ({
-        type: 'InternalConnection' as const,
-        source: conn.source.entity,
-        target: conn.target.entity,
-      }));
-      return { _type: 'connections', value: internalConns };
     }
     if (ctx.flowBlock?.[0]) {
       return { _type: 'flow', value: this.visit(ctx.flowBlock[0]) };
@@ -1104,111 +1082,6 @@ class CellDiagramsVisitor extends BaseCstVisitor {
     const entity = ctx.refEntity[0]!.image;
     const component = ctx.refComponent?.[0]?.image;
     return component ? `${entity}.${component}` : entity;
-  }
-
-  // ========================================
-  // Connections Block
-  // ========================================
-
-  connectionsBlock(ctx: { connection?: CstNode[] }): ConnectionsBlock {
-    const connections: Connection[] = [];
-    if (ctx.connection) {
-      for (const connNode of ctx.connection) {
-        connections.push(this.visit(connNode) as Connection);
-      }
-    }
-    return {
-      type: 'ConnectionsBlock',
-      connections,
-    };
-  }
-
-  connection(ctx: {
-    source: CstNode[];
-    target: CstNode[];
-    connectionAttributes?: CstNode[];
-  }): Connection {
-    const source = this.visit(ctx.source[0]!) as ConnectionEndpoint;
-    const target = this.visit(ctx.target[0]!) as ConnectionEndpoint;
-
-    let direction: ConnectionDirection | undefined;
-    const attributes: Record<string, AttributeValue> = {};
-
-    if (ctx.connectionAttributes?.[0]) {
-      const result = this.visit(ctx.connectionAttributes[0]) as {
-        direction?: ConnectionDirection;
-        attributes: Record<string, AttributeValue>;
-      };
-      direction = result.direction;
-      Object.assign(attributes, result.attributes);
-    }
-
-    return {
-      type: 'Connection',
-      ...(direction && { direction }),
-      source,
-      target,
-      attributes,
-    };
-  }
-
-  connectionAttributes(ctx: {
-    connectionAttr?: CstNode[];
-  }): { direction?: ConnectionDirection; attributes: Record<string, AttributeValue> } {
-    let direction: ConnectionDirection | undefined;
-    const attributes: Record<string, AttributeValue> = {};
-
-    if (ctx.connectionAttr) {
-      for (const attrNode of ctx.connectionAttr) {
-        const result = this.visit(attrNode) as
-          | { _type: 'direction'; value: ConnectionDirection }
-          | { _type: 'property'; key: string; value: AttributeValue };
-
-        if (result._type === 'direction') {
-          direction = result.value;
-        } else {
-          attributes[result.key] = result.value;
-        }
-      }
-    }
-
-    return { direction, attributes };
-  }
-
-  connectionAttr(ctx: {
-    connectionDirection?: CstNode[];
-    property?: CstNode[];
-  }): { _type: 'direction'; value: ConnectionDirection } | { _type: 'property'; key: string; value: AttributeValue } {
-    if (ctx.connectionDirection?.[0]) {
-      return { _type: 'direction', value: this.visit(ctx.connectionDirection[0]) as ConnectionDirection };
-    }
-    if (ctx.property?.[0]) {
-      const [key, value] = this.visit(ctx.property[0]) as [string, AttributeValue];
-      return { _type: 'property', key, value };
-    }
-    return { _type: 'property', key: '', value: '' };
-  }
-
-  connectionDirection(ctx: { direction: IToken[] }): ConnectionDirection {
-    const token = ctx.direction[0]!;
-    const mapping: Record<string, ConnectionDirection> = {
-      'Northbound': 'northbound',
-      'Southbound': 'southbound',
-      'Eastbound': 'eastbound',
-      'Westbound': 'westbound',
-    };
-    return mapping[token.tokenType.name] || 'eastbound';
-  }
-
-  connectionEndpoint(ctx: {
-    entity: IToken[];
-    component?: IToken[];
-  }): ConnectionEndpoint {
-    return {
-      type: 'ConnectionEndpoint',
-      entity: ctx.entity[0]!.image,
-      ...(ctx.component?.[0] && { component: ctx.component[0].image }),
-    };
   }
 
   // ========================================

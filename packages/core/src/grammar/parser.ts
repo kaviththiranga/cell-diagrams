@@ -15,7 +15,6 @@ import {
   External,
   User,
   Application,
-  Connections,
   Flow,
   // Cell/Gateway properties
   Label,
@@ -68,11 +67,6 @@ import {
   Storage,
   Target,
   Policy,
-  // Connection directions
-  Northbound,
-  Southbound,
-  Eastbound,
-  Westbound,
   // Endpoint types
   Api,
   Events,
@@ -235,7 +229,7 @@ export class CellDiagramsParser extends CstParser {
 
   /**
    * Statement = CellDefinition | ExternalDefinition | UserDefinition
-   *           | ApplicationDefinition | ConnectionsBlock | FlowBlock
+   *           | ApplicationDefinition | FlowBlock
    */
   private statement = this.RULE('statement', () => {
     this.OR([
@@ -243,7 +237,6 @@ export class CellDiagramsParser extends CstParser {
       { ALT: () => this.SUBRULE(this.externalDefinition) },
       { ALT: () => this.SUBRULE(this.userDefinition) },
       { ALT: () => this.SUBRULE(this.applicationDefinition) },
-      { ALT: () => this.SUBRULE(this.connectionsBlock) },
       { ALT: () => this.SUBRULE(this.flowBlock) },
     ]);
   });
@@ -278,7 +271,7 @@ export class CellDiagramsParser extends CstParser {
   /**
    * CellBody = LabelProperty | TypeProperty | DescriptionProperty | ReplicasProperty
    *          | GatewayBlock | ComponentsBlock | ComponentBlock | ClusterDefinition
-   *          | ConnectionsBlock | FlowBlock | NestedCellDefinition
+   *          | FlowBlock | NestedCellDefinition
    */
   private cellBody = this.RULE('cellBody', () => {
     this.OR([
@@ -293,7 +286,6 @@ export class CellDiagramsParser extends CstParser {
       { ALT: () => this.SUBRULE(this.functionBlock) },
       { ALT: () => this.SUBRULE(this.legacyBlock) },
       { ALT: () => this.SUBRULE(this.clusterDefinition) },
-      { ALT: () => this.SUBRULE(this.connectionsBlock) },
       { ALT: () => this.SUBRULE(this.flowBlock) },
       // Nested cells for composite architectures
       { ALT: () => this.SUBRULE(this.cellDefinition, { LABEL: 'nestedCell' }) },
@@ -965,82 +957,6 @@ export class CellDiagramsParser extends CstParser {
     this.OPTION(() => {
       this.CONSUME(Dot);
       this.CONSUME2(Identifier, { LABEL: 'refComponent' });
-    });
-  });
-
-  // ========================================
-  // Connections Block (Legacy)
-  // ========================================
-
-  /**
-   * ConnectionsBlock = "connections" "{" Connection* "}"
-   */
-  private connectionsBlock = this.RULE('connectionsBlock', () => {
-    this.CONSUME(Connections);
-    this.CONSUME(LBrace);
-    this.MANY(() => {
-      this.SUBRULE(this.connection);
-    });
-    this.CONSUME(RBrace);
-  });
-
-  /**
-   * Connection = Source "->" Target ConnectionAttributes?
-   */
-  private connection = this.RULE('connection', () => {
-    this.SUBRULE1(this.connectionEndpoint, { LABEL: 'source' });
-    this.CONSUME(Arrow);
-    this.SUBRULE2(this.connectionEndpoint, { LABEL: 'target' });
-    this.OPTION(() => {
-      this.SUBRULE(this.connectionAttributes);
-    });
-  });
-
-  /**
-   * ConnectionAttributes = "[" ConnectionAttr ("," ConnectionAttr)* "]"
-   */
-  private connectionAttributes = this.RULE('connectionAttributes', () => {
-    this.CONSUME(LBracket);
-    this.OPTION(() => {
-      this.SUBRULE1(this.connectionAttr);
-      this.MANY(() => {
-        this.CONSUME(Comma);
-        this.SUBRULE2(this.connectionAttr);
-      });
-    });
-    this.CONSUME(RBracket);
-  });
-
-  /**
-   * ConnectionAttr = Direction | Property
-   */
-  private connectionAttr = this.RULE('connectionAttr', () => {
-    this.OR([
-      { ALT: () => this.SUBRULE(this.connectionDirection) },
-      { ALT: () => this.SUBRULE(this.property) },
-    ]);
-  });
-
-  /**
-   * ConnectionDirection = "northbound" | "southbound" | "eastbound" | "westbound"
-   */
-  private connectionDirection = this.RULE('connectionDirection', () => {
-    this.OR([
-      { ALT: () => this.CONSUME(Northbound, { LABEL: 'direction' }) },
-      { ALT: () => this.CONSUME(Southbound, { LABEL: 'direction' }) },
-      { ALT: () => this.CONSUME(Eastbound, { LABEL: 'direction' }) },
-      { ALT: () => this.CONSUME(Westbound, { LABEL: 'direction' }) },
-    ]);
-  });
-
-  /**
-   * ConnectionEndpoint = Identifier ("." Identifier)?
-   */
-  private connectionEndpoint = this.RULE('connectionEndpoint', () => {
-    this.CONSUME1(Identifier, { LABEL: 'entity' });
-    this.OPTION(() => {
-      this.CONSUME(Dot);
-      this.CONSUME2(Identifier, { LABEL: 'component' });
     });
   });
 

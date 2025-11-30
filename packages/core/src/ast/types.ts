@@ -2,7 +2,7 @@
  * CellDL AST Type Definitions
  *
  * Complete type system for Cell-Based Architecture DSL.
- * Supports both new CellDL syntax (workspace, flow, route) and legacy diagram syntax.
+ * Uses the new CellDL syntax (workspace, flow, route).
  */
 
 // ============================================
@@ -144,7 +144,6 @@ export type Statement =
   | ExternalDefinition
   | UserDefinition
   | ApplicationDefinition
-  | ConnectionsBlock
   | FlowDefinition;
 
 // ============================================
@@ -170,9 +169,7 @@ export interface CellDefinition extends BaseNode {
   gateways: GatewayDefinition[];
   /** Components inside the cell */
   components: (ComponentDefinition | ClusterDefinition)[];
-  /** Internal connections between components */
-  connections: InternalConnection[];
-  /** Flow definitions for traffic patterns */
+  /** Flow definitions for internal and external traffic patterns */
   flows: FlowDefinition[];
   /** Nested cells for composite architectures */
   nestedCells: CellDefinition[];
@@ -308,50 +305,6 @@ export interface FlowDefinition extends BaseNode {
 }
 
 // ============================================
-// Connection Definitions (Legacy Syntax)
-// ============================================
-
-/** Internal connection between components within a cell */
-export interface InternalConnection extends BaseNode {
-  type: 'InternalConnection';
-  /** Source component ID */
-  source: string;
-  /** Target component ID */
-  target: string;
-  /** Optional label */
-  label?: string;
-}
-
-/** Block of inter-cell/external connections */
-export interface ConnectionsBlock extends BaseNode {
-  type: 'ConnectionsBlock';
-  /** List of connections */
-  connections: Connection[];
-}
-
-/** Inter-cell or user-to-cell connection */
-export interface Connection extends BaseNode {
-  type: 'Connection';
-  /** Traffic direction */
-  direction?: ConnectionDirection;
-  /** Source endpoint */
-  source: ConnectionEndpoint;
-  /** Target endpoint */
-  target: ConnectionEndpoint;
-  /** Connection attributes (via, label, protocol, etc.) */
-  attributes: Record<string, AttributeValue>;
-}
-
-/** Endpoint reference in a connection (Cell.Gateway or just Cell) */
-export interface ConnectionEndpoint extends BaseNode {
-  type: 'ConnectionEndpoint';
-  /** Entity ID (cell, user, or external) */
-  entity: string;
-  /** Optional component/gateway reference */
-  component?: string;
-}
-
-// ============================================
 // External System Definition
 // ============================================
 
@@ -422,10 +375,6 @@ export function isUserDefinition(node: Statement): node is UserDefinition {
 
 export function isApplicationDefinition(node: Statement): node is ApplicationDefinition {
   return node.type === 'ApplicationDefinition';
-}
-
-export function isConnectionsBlock(node: Statement): node is ConnectionsBlock {
-  return node.type === 'ConnectionsBlock';
 }
 
 export function isFlowDefinition(node: Statement): node is FlowDefinition {

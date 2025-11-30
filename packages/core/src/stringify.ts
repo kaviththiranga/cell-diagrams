@@ -12,17 +12,13 @@ import {
   ExternalDefinition,
   UserDefinition,
   ApplicationDefinition,
-  ConnectionsBlock,
-  Connection,
   ComponentDefinition,
   ClusterDefinition,
   GatewayDefinition,
-  ConnectionEndpoint,
   AttributeValue,
   FlowDefinition,
   FlowConnection,
   isClusterDefinition,
-  InternalConnection,
 } from './ast/types';
 
 // ============================================
@@ -128,8 +124,6 @@ function stringifyStatement(
       return stringifyUserDefinition(stmt, opts, baseIndent);
     case 'ApplicationDefinition':
       return stringifyApplicationDefinition(stmt, opts, baseIndent);
-    case 'ConnectionsBlock':
-      return stringifyConnectionsBlock(stmt, opts, baseIndent);
     case 'FlowDefinition':
       return stringifyFlowDefinition(stmt, opts, baseIndent);
     default:
@@ -193,12 +187,6 @@ function stringifyCellDefinition(
   for (const nestedCell of cell.nestedCells) {
     lines.push('');
     lines.push(stringifyCellDefinition(nestedCell, opts, baseIndent + 1));
-  }
-
-  // Legacy internal connections (convert to flow syntax)
-  if (cell.connections.length > 0) {
-    lines.push('');
-    lines.push(stringifyInternalConnections(cell.connections, opts, baseIndent + 1));
   }
 
   lines.push(`${i0}}`);
@@ -446,26 +434,6 @@ function groupFlowsIntoChains(flows: FlowConnection[]): FlowChain[] {
   return chains;
 }
 
-function stringifyInternalConnections(
-  connections: InternalConnection[],
-  opts: Required<StringifyOptions>,
-  baseIndent: number
-): string {
-  const { indent, lineEnding } = opts;
-  const i0 = indent.repeat(baseIndent);
-  const i1 = indent.repeat(baseIndent + 1);
-  const lines: string[] = [];
-
-  lines.push(`${i0}flow {`);
-  for (const conn of connections) {
-    const labelStr = conn.label ? ` : "${escapeString(conn.label)}"` : '';
-    lines.push(`${i1}${conn.source} -> ${conn.target}${labelStr}`);
-  }
-  lines.push(`${i0}}`);
-
-  return lines.join(lineEnding);
-}
-
 function stringifyExternalDefinition(
   ext: ExternalDefinition,
   opts: Required<StringifyOptions>,
@@ -539,43 +507,6 @@ function stringifyApplicationDefinition(
   lines.push(`${i0}}`);
 
   return lines.join(lineEnding);
-}
-
-function stringifyConnectionsBlock(
-  block: ConnectionsBlock,
-  opts: Required<StringifyOptions>,
-  baseIndent: number
-): string {
-  const { indent, lineEnding } = opts;
-  const i0 = indent.repeat(baseIndent);
-  const i1 = indent.repeat(baseIndent + 1);
-  const lines: string[] = [];
-
-  // Convert to flow block syntax
-  lines.push(`${i0}flow {`);
-
-  for (const conn of block.connections) {
-    lines.push(`${i1}${stringifyConnection(conn)}`);
-  }
-
-  lines.push(`${i0}}`);
-
-  return lines.join(lineEnding);
-}
-
-function stringifyConnection(conn: Connection): string {
-  const source = stringifyEndpoint(conn.source);
-  const target = stringifyEndpoint(conn.target);
-  const label = conn.attributes.label as string | undefined;
-  const labelStr = label ? ` : "${escapeString(label)}"` : '';
-  return `${source} -> ${target}${labelStr}`;
-}
-
-function stringifyEndpoint(ep: ConnectionEndpoint): string {
-  if (ep.component) {
-    return `${ep.entity}.${ep.component}`;
-  }
-  return ep.entity;
 }
 
 // ============================================
