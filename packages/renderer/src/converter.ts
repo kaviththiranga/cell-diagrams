@@ -611,6 +611,12 @@ function connectionToEdge(conn: Connection): DiagramEdge {
     ? `${conn.target.entity}.${conn.target.component}`
     : conn.target.entity;
 
+  // Determine if this is an inter-cell connection
+  // Inter-cell: source and target entities are different (and both are cells)
+  const sourceEntity = conn.source.entity;
+  const targetEntity = conn.target.entity;
+  const isInterCell = sourceEntity !== targetEntity;
+
   // Determine handle IDs based on direction
   // Direction indicates how traffic flows from the source's perspective:
   // - northbound: from south to north (source uses bottom, target uses top)
@@ -646,13 +652,17 @@ function connectionToEdge(conn: Connection): DiagramEdge {
   // Determine edge style based on direction
   const isDotted = !conn.direction || conn.direction === 'westbound';
 
+  // Use step edge type (straight lines with right angles) for inter-cell connections
+  // Use straight edge type for all other connections (external-to-cell, cell-to-external, etc.)
+  const edgeType = isInterCell ? 'step' : 'straight';
+
   return {
     id: `${sourceId}-${targetId}`,
     source: sourceId,
     target: targetId,
     sourceHandle,
     targetHandle,
-    type: 'smoothstep', // Use smoothstep for curvy edges
+    type: edgeType,
     style: {
       stroke: '#868e96',
       strokeWidth: 1.5,
@@ -749,6 +759,15 @@ export function applyLayout(
     }
   }
 
+  // Also check for gateway connections - if edge connects to/from a gateway, 
+  // we need to identify the cell it belongs to
+  const gatewayToCellMap = new Map<string, string>(); // gatewayId -> cellId
+  for (const gatewayNode of childNodes.filter(n => n.type === 'gateway')) {
+    if (gatewayNode.parentId) {
+      gatewayToCellMap.set(gatewayNode.id, gatewayNode.parentId);
+    }
+  }
+
   // Categorize users and externals
   for (const user of users) {
     if (headerNodeIds.has(user.id)) {
@@ -787,11 +806,80 @@ export function applyLayout(
   // ============================================
   // ZONE 1: HEADER - Users and externals that talk TO cells
   // ============================================
+  // Identify externals/users that connect to a single cell with northbound/southbound
+  // These should be positioned directly above/below the cell's connection point
+  const nodeToCellMap = new Map<string, { cellId: string; direction: 'northbound' | 'southbound' }>();
+  
+  for (const edge of state.edges) {
+    const sourceParts = edge.source.split('.');
+    const targetParts = edge.target.split('.');
+    const sourceBaseId = sourceParts[0] ?? edge.source;
+    const targetBaseId = targetParts[0] ?? edge.target;
+    const sourceBaseIsCell = cellIds.has(sourceBaseId);
+    const targetBaseIsCell = cellIds.has(targetBaseId);
+    
+    // Get edge data to check direction
+    const edgeData = edge.data as ConnectionEdgeData | undefined;
+    const direction = edgeData?.direction;
+    
+    // Only process northbound/southbound connections (external systems can only do these)
+    if (direction !== 'northbound' && direction !== 'southbound') {
+      continue;
+    }
+    
+    // External/user to cell
+    if (!sourceBaseIsCell && targetBaseIsCell) {
+      const existing = nodeToCellMap.get(sourceBaseId);
+      if (!existing) {
+        // northbound: external is above cell, southbound: external is below cell
+        nodeToCellMap.set(sourceBaseId, { cellId: targetBaseId, direction });
+      } else if (existing.cellId !== targetBaseId) {
+        // Connects to multiple cells - don't align with cell
+        nodeToCellMap.delete(sourceBaseId);
+      }
+    }
+    // Cell to external/user
+    else if (sourceBaseIsCell && !targetBaseIsCell) {
+      const existing = nodeToCellMap.get(targetBaseId);
+      if (!existing) {
+        // For cell to external: direction is from cell's perspective
+        // northbound: external is above cell, southbound: external is below cell
+        nodeToCellMap.set(targetBaseId, { cellId: sourceBaseId, direction });
+      } else if (existing.cellId !== sourceBaseId) {
+        // Connects to multiple cells - don't align with cell
+        nodeToCellMap.delete(targetBaseId);
+      }
+    }
+  }
+
+  // Separate nodes that should be aligned with gateways from those that shouldn't
+  const alignedHeaderNodes: DiagramNode[] = [];
+  const regularHeaderNodes: DiagramNode[] = [];
+  const alignedBottomNodes: DiagramNode[] = [];
+  const regularBottomNodes: DiagramNode[] = [];
+
+  for (const node of headerNodes) {
+    if (nodeToCellMap.has(node.id)) {
+      alignedHeaderNodes.push(node);
+    } else {
+      regularHeaderNodes.push(node);
+    }
+  }
+
+  for (const node of bottomNodes) {
+    if (nodeToCellMap.has(node.id)) {
+      alignedBottomNodes.push(node);
+    } else {
+      regularBottomNodes.push(node);
+    }
+  }
+
+  // Position regular header nodes first
   let headerY = opts.padding;
   let headerX = opts.padding;
   const headerSpacing = 120;
 
-  for (const node of headerNodes) {
+  for (const node of regularHeaderNodes) {
     const size = getNodeSize(node);
     layoutedNodes.push({
       ...node,
@@ -902,7 +990,8 @@ export function applyLayout(
   let bottomX = opts.padding;
   const bottomSpacing = 120;
 
-  for (const node of bottomNodes) {
+  // Position regular bottom nodes first
+  for (const node of regularBottomNodes) {
     const size = getNodeSize(node);
     layoutedNodes.push({
       ...node,
@@ -913,6 +1002,97 @@ export function applyLayout(
 
   // Add child nodes (components and gateways) - they use relative positioning
   layoutedNodes.push(...childNodes);
+
+  // Now position aligned nodes above/below their respective cells
+  // For northbound: position above cell's top center
+  // For southbound: position below cell's bottom center
+  const cellPositions = new Map<string, { centerX: number; topY: number; bottomY: number }>();
+  
+  for (const cell of cells) {
+    const cellNode = layoutedNodes.find(n => n.id === cell.id);
+    if (cellNode) {
+      const cellSize = getNodeSize(cellNode);
+      const centerX = cellNode.position.x + cellSize.width / 2;
+      const topY = cellNode.position.y;
+      const bottomY = cellNode.position.y + cellSize.height;
+      
+      cellPositions.set(cell.id, {
+        centerX,
+        topY,
+        bottomY,
+      });
+    }
+  }
+
+  // Position aligned header nodes above their cells (northbound)
+  for (const node of alignedHeaderNodes) {
+    const alignment = nodeToCellMap.get(node.id);
+    if (alignment && alignment.direction === 'northbound') {
+      const cellPos = cellPositions.get(alignment.cellId);
+      if (cellPos) {
+        const size = getNodeSize(node);
+        // Position directly above cell, center-aligned
+        layoutedNodes.push({
+          ...node,
+          position: {
+            x: cellPos.centerX - size.width / 2, // Center align with cell
+            y: cellPos.topY - size.height - 40, // 40px spacing above cell top
+          },
+        });
+      } else {
+        // Fallback to regular positioning
+        const size = getNodeSize(node);
+        layoutedNodes.push({
+          ...node,
+          position: { x: headerX, y: headerY },
+        });
+        headerX += size.width + headerSpacing;
+      }
+    } else {
+      // Fallback to regular positioning
+      const size = getNodeSize(node);
+      layoutedNodes.push({
+        ...node,
+        position: { x: headerX, y: headerY },
+      });
+      headerX += size.width + headerSpacing;
+    }
+  }
+
+  // Position aligned bottom nodes below their cells (southbound)
+  for (const node of alignedBottomNodes) {
+    const alignment = nodeToCellMap.get(node.id);
+    if (alignment && alignment.direction === 'southbound') {
+      const cellPos = cellPositions.get(alignment.cellId);
+      if (cellPos) {
+        const size = getNodeSize(node);
+        // Position directly below cell, center-aligned
+        layoutedNodes.push({
+          ...node,
+          position: {
+            x: cellPos.centerX - size.width / 2, // Center align with cell
+            y: cellPos.bottomY + 40, // 40px spacing below cell bottom
+          },
+        });
+      } else {
+        // Fallback to regular positioning
+        const size = getNodeSize(node);
+        layoutedNodes.push({
+          ...node,
+          position: { x: bottomX, y: bottomStartY },
+        });
+        bottomX += size.width + bottomSpacing;
+      }
+    } else {
+      // Fallback to regular positioning
+      const size = getNodeSize(node);
+      layoutedNodes.push({
+        ...node,
+        position: { x: bottomX, y: bottomStartY },
+      });
+      bottomX += size.width + bottomSpacing;
+    }
+  }
 
   return {
     nodes: layoutedNodes,
