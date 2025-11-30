@@ -11,6 +11,13 @@ export default defineConfig({
   },
   optimizeDeps: {
     include: ['@cell-diagrams/core', '@cell-diagrams/renderer'],
+    // Don't force re-optimization by default - use 'dev:clean' script if needed
+  },
+  server: {
+    fs: {
+      // Allow serving files from workspace packages
+      allow: ['..'],
+    },
   },
   build: {
     target: 'es2022',

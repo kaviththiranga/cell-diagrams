@@ -25,6 +25,7 @@ function ConnectionEdgeComponent({
   selected,
   markerEnd,
 }: EdgeProps<DiagramEdge>) {
+  // Use getBezierPath to create curvy edges
   const [edgePath, labelX, labelY] = getBezierPath({
     sourceX,
     sourceY,

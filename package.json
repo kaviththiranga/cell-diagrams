@@ -7,12 +7,14 @@
   "license": "MIT",
   "scripts": {
     "dev": "turbo run dev",
+    "dev:clean": "pnpm clean:caches && turbo run dev",
     "build": "turbo run build",
     "test": "turbo run test",
     "test:watch": "turbo run test:watch",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "clean": "turbo run clean && rm -rf node_modules .turbo",
+    "clean:caches": "rm -rf apps/web/node_modules/.vite apps/web/dist packages/*/dist extensions/*/dist .turbo",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\""
   },
   "devDependencies": {

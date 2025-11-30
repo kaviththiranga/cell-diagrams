@@ -40,8 +40,6 @@ import type { GatewayNodeData as GatewayNodeDataType, GatewayPosition } from './
 // ============================================
 
 const CELL_PADDING = 60;
-const COMPONENT_SPACING = 100;
-const GATEWAY_OFFSET = 30;
 
 // ============================================
 // AST to Diagram Conversion
@@ -112,15 +110,29 @@ function cellToNodes(
     allComponents.push(...cluster.components);
   }
 
-  // Calculate cell size based on components
+  // Calculate cell size based on components using circular layout
   // For a regular octagon with equal sides, we want the cell to be square
   const componentCount = allComponents.length;
-  const cols = Math.ceil(Math.sqrt(componentCount + 1)); // +1 for gateway space
-  const rows = Math.ceil((componentCount + 1) / cols);
-  const baseWidth = cols * COMPONENT_SPACING + CELL_PADDING * 2;
-  const baseHeight = rows * COMPONENT_SPACING + CELL_PADDING * 2 + 40; // +40 for label
-  // Make it square by using the max dimension for a proper regular octagon
-  const cellSize = Math.max(baseWidth, baseHeight);
+  const componentSize = 50; // Size of component node
+  
+  // Calculate optimal size based on component count
+  // For circular layout, we need enough space for components arranged in a circle
+  let minRadius: number;
+  if (componentCount === 0) {
+    minRadius = 60;
+  } else if (componentCount <= 4) {
+    minRadius = 80;
+  } else if (componentCount <= 8) {
+    minRadius = 100;
+  } else {
+    // For many components, use spiral - need more space
+    minRadius = 120 + (componentCount - 8) * 10;
+  }
+  
+  // Cell size = 2 * (radius + componentSize/2 + padding) + space for label
+  const radius = minRadius;
+  const baseSize = 2 * (radius + componentSize / 2 + CELL_PADDING) + 40; // +40 for label
+  const cellSize = Math.max(300, baseSize); // Minimum size of 300
   const cellWidth = cellSize;
   const cellHeight = cellSize;
 
@@ -221,13 +233,45 @@ function cellToNodes(
     } as unknown as DiagramNode);
   }
 
-  // Create component nodes positioned inside cell
-  let compIndex = 0;
-  const startY = cell.gateway ? COMPONENT_SPACING + GATEWAY_OFFSET : CELL_PADDING;
-
-  for (const comp of allComponents) {
-    const col = compIndex % cols;
-    const row = Math.floor(compIndex / cols);
+  // Create component nodes positioned inside cell with circular/spiral layout
+  // This better utilizes space and creates a more organic arrangement
+  const centerX = cellWidth / 2;
+  const centerY = cellHeight / 2;
+  
+  // Calculate optimal radius based on component count and cell size
+  // Use a spiral pattern that adapts to the number of components
+  const availableRadius = Math.min(cellWidth, cellHeight) / 2 - componentSize - CELL_PADDING;
+  const layoutRadius = Math.max(minRadius, availableRadius * 0.6); // Use 60% of available space
+  
+  for (let compIndex = 0; compIndex < allComponents.length; compIndex++) {
+    const comp = allComponents[compIndex];
+    if (!comp) continue; // TypeScript guard
+    
+    // Use circular layout: distribute components evenly around a circle
+    // For better space utilization, use golden angle spiral if many components
+    let angle: number;
+    let r: number;
+    
+    if (componentCount <= 8) {
+      // For few components, use simple circle
+      angle = (2 * Math.PI * compIndex) / componentCount;
+      r = layoutRadius;
+    } else {
+      // For many components, use golden angle spiral for better distribution
+      const goldenAngle = Math.PI * (3 - Math.sqrt(5)); // Golden angle in radians
+      angle = compIndex * goldenAngle;
+      // Spiral outwards based on index
+      const spiralFactor = Math.sqrt(compIndex / componentCount);
+      r = minRadius + (layoutRadius - minRadius) * spiralFactor;
+    }
+    
+    // Calculate position
+    const x = centerX + r * Math.cos(angle) - componentSize / 2;
+    const y = centerY + r * Math.sin(angle) - componentSize / 2;
+    
+    // Ensure components stay within cell bounds (accounting for padding)
+    const boundedX = Math.max(CELL_PADDING, Math.min(cellWidth - CELL_PADDING - componentSize, x));
+    const boundedY = Math.max(CELL_PADDING + 30, Math.min(cellHeight - CELL_PADDING - componentSize, y));
 
     const compData: ComponentNodeDataType = {
       type: 'component',
@@ -243,25 +287,30 @@ function cellToNodes(
       id: `${cell.id}.${comp.id}`,
       type: 'component',
       position: {
-        x: CELL_PADDING + col * COMPONENT_SPACING,
-        y: startY + row * COMPONENT_SPACING,
+        x: boundedX,
+        y: boundedY,
       },
       data: compData,
       parentId: cell.id,
       extent: 'parent',
     } as unknown as DiagramNode);
-
-    compIndex++;
   }
 
-  // Create edges for internal connections
+  // Create edges for internal connections - use smoothstep for curvy edges
   for (const conn of cell.connections) {
     edges.push({
       id: `${cell.id}.${conn.source}-${conn.target}`,
       source: `${cell.id}.${conn.source}`,
       target: `${cell.id}.${conn.target}`,
-      type: 'smoothstep',
+      type: 'connection', // Use our custom ConnectionEdge for curvy lines
       style: { stroke: '#868e96', strokeWidth: 1.5 },
+      data: {
+        direction: undefined,
+        label: undefined,
+        via: undefined,
+        protocol: undefined,
+        attributes: {},
+      },
       markerEnd: {
         type: 'arrowclosed' as MarkerType,
         width: 15,
@@ -445,7 +494,7 @@ function connectionToEdge(conn: Connection): DiagramEdge {
     target: targetId,
     sourceHandle,
     targetHandle,
-    type: 'smoothstep',
+    type: 'smoothstep', // Use smoothstep for curvy edges
     style: {
       stroke: '#868e96',
       strokeWidth: 1.5,
