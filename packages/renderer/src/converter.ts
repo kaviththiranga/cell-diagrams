@@ -6,6 +6,7 @@
  */
 
 import type { MarkerType } from '@xyflow/react';
+import dagre from 'dagre';
 import type {
   Program,
   CellDefinition,
@@ -511,13 +512,38 @@ function connectionToEdge(conn: Connection): DiagramEdge {
 }
 
 // ============================================
-// Layout with Custom Algorithm
+// Layout with Dagre Algorithm
 // ============================================
 
 /**
- * Apply automatic layout to nodes.
- * Uses a simple algorithm that positions cells in a grid,
- * with users at top and externals at bottom.
+ * Get node dimensions for layout calculation.
+ */
+function getNodeSize(node: DiagramNode): { width: number; height: number } {
+  switch (node.type) {
+    case 'cell': {
+      const cellData = node.data as CellNodeData;
+      return {
+        width: cellData.width ?? 400,
+        height: cellData.height ?? 300,
+      };
+    }
+    case 'user':
+    case 'external':
+      return { width: 100, height: 100 };
+    case 'application':
+      return { width: 320, height: 200 };
+    case 'component':
+      return { width: 80, height: 80 };
+    case 'gateway':
+      return { width: 60, height: 60 };
+    default:
+      return { width: 100, height: 100 };
+  }
+}
+
+/**
+ * Apply three-zone layout: Header (incoming), Middle (cells), Bottom (outgoing).
+ * Cells are arranged horizontally in the middle with intelligent wrapping based on connections.
  */
 export function applyLayout(
   state: DiagramState,
@@ -530,72 +556,205 @@ export function applyLayout(
   const users = state.nodes.filter((n) => n.type === 'user');
   const externals = state.nodes.filter((n) => n.type === 'external');
   const applications = state.nodes.filter((n) => n.type === 'application');
-  // Components and gateways are positioned relative to their parent cells
-
-  const layoutedNodes: DiagramNode[] = [];
-
-  // Layout users at the top
-  let userX = opts.padding;
-  for (const user of users) {
-    layoutedNodes.push({
-      ...user,
-      position: { x: userX, y: opts.padding },
-    });
-    userX += 150 + opts.nodeSpacingX;
-  }
-
-  // Layout cells in a grid
-  const cellsPerRow = Math.ceil(Math.sqrt(cells.length));
-  let cellX = opts.padding;
-  let cellY = users.length > 0 ? 150 + opts.nodeSpacingY : opts.padding;
-  let maxCellHeight = 0;
-  let cellCol = 0;
-
-  for (const cell of cells) {
-    const cellData = cell.data as CellNodeData;
-    const cellWidth = cellData.width ?? 400;
-    const cellHeight = cellData.height ?? 300;
-
-    layoutedNodes.push({
-      ...cell,
-      position: { x: cellX, y: cellY },
-    });
-
-    maxCellHeight = Math.max(maxCellHeight, cellHeight);
-    cellX += cellWidth + opts.nodeSpacingX;
-    cellCol++;
-
-    if (cellCol >= cellsPerRow) {
-      cellCol = 0;
-      cellX = opts.padding;
-      cellY += maxCellHeight + opts.nodeSpacingY;
-      maxCellHeight = 0;
-    }
-  }
-
-  // Layout externals at the bottom
-  const bottomY = cellY + maxCellHeight + opts.nodeSpacingY;
-  let extX = opts.padding + 200; // Center under cells
-  for (const ext of externals) {
-    layoutedNodes.push({
-      ...ext,
-      position: { x: extX, y: bottomY },
-    });
-    extX += 150 + opts.nodeSpacingX;
-  }
-
-  // Layout applications (if any)
-  for (const app of applications) {
-    layoutedNodes.push({
-      ...app,
-      position: { x: opts.padding, y: opts.padding },
-    });
-  }
-
-  // Add child nodes (components and gateways) - they use relative positioning
   const childNodes = state.nodes.filter(
     (n) => n.type === 'component' || n.type === 'gateway'
   );
+
+  // Build sets for quick lookup
+  const cellIds = new Set(cells.map((n) => n.id));
+
+  // Analyze edges to categorize nodes into zones
+  // Header: nodes that have outgoing edges TO cells (sources)
+  // Bottom: nodes that have incoming edges FROM cells (targets)
+  const headerNodes: DiagramNode[] = [];
+  const bottomNodes: DiagramNode[] = [];
+  const headerNodeIds = new Set<string>();
+  const bottomNodeIds = new Set<string>();
+
+  // Analyze edges to determine header (incoming to cells) and bottom (outgoing from cells)
+  for (const edge of state.edges) {
+    // Extract base IDs (remove component suffixes like "Cell.ComponentX")
+    const sourceParts = edge.source.split('.');
+    const targetParts = edge.target.split('.');
+    const sourceBaseId = sourceParts[0] ?? edge.source;
+    const targetBaseId = targetParts[0] ?? edge.target;
+    const sourceBaseIsCell = cellIds.has(sourceBaseId);
+    const targetBaseIsCell = cellIds.has(targetBaseId);
+
+    // If edge goes from non-cell (user/external) to cell, source goes to header
+    if (!sourceBaseIsCell && targetBaseIsCell) {
+      headerNodeIds.add(sourceBaseId);
+    }
+
+    // If edge goes from cell to non-cell (external), target goes to bottom
+    if (sourceBaseIsCell && !targetBaseIsCell) {
+      bottomNodeIds.add(targetBaseId);
+    }
+  }
+
+  // Categorize users and externals
+  for (const user of users) {
+    if (headerNodeIds.has(user.id)) {
+      headerNodes.push(user);
+    } else if (bottomNodeIds.has(user.id)) {
+      bottomNodes.push(user);
+    } else {
+      // Default: users go to header
+      headerNodes.push(user);
+    }
+  }
+
+  for (const ext of externals) {
+    if (headerNodeIds.has(ext.id)) {
+      headerNodes.push(ext);
+    } else if (bottomNodeIds.has(ext.id)) {
+      bottomNodes.push(ext);
+    } else {
+      // Default: externals without connections go to bottom
+      bottomNodes.push(ext);
+    }
+  }
+
+  // Applications can go in header if they connect to cells
+  for (const app of applications) {
+    if (headerNodeIds.has(app.id)) {
+      headerNodes.push(app);
+    } else {
+      // Default: applications go to header
+      headerNodes.push(app);
+    }
+  }
+
+  const layoutedNodes: DiagramNode[] = [];
+
+  // ============================================
+  // ZONE 1: HEADER - Users and externals that talk TO cells
+  // ============================================
+  let headerY = opts.padding;
+  let headerX = opts.padding;
+  const headerSpacing = 120;
+
+  for (const node of headerNodes) {
+    const size = getNodeSize(node);
+    layoutedNodes.push({
+      ...node,
+      position: { x: headerX, y: headerY },
+    });
+    headerX += size.width + headerSpacing;
+  }
+
+  // ============================================
+  // ZONE 2: MIDDLE - Cells arranged horizontally with intelligent wrapping
+  // ============================================
+  const middleStartY = headerNodes.length > 0
+    ? headerY + 150 + opts.nodeSpacingY
+    : opts.padding;
+
+  // Use dagre for cell-to-cell layout (horizontal priority)
+  if (cells.length > 0) {
+    const cellEdges = state.edges.filter(
+      (e) => cellIds.has(e.source) && cellIds.has(e.target)
+    );
+
+    if (cellEdges.length > 0) {
+      // Use dagre for cells with connections
+      const g = new dagre.graphlib.Graph();
+      g.setDefaultEdgeLabel(() => ({}));
+      g.setGraph({
+        rankdir: 'LR', // Left-to-right for horizontal arrangement
+        nodesep: opts.nodeSpacingX,
+        ranksep: opts.nodeSpacingY,
+        marginx: 0,
+        marginy: 0,
+      });
+
+      // Add cells to dagre graph
+      for (const cell of cells) {
+        const size = getNodeSize(cell);
+        g.setNode(cell.id, {
+          width: size.width,
+          height: size.height,
+        });
+      }
+
+      // Add cell-to-cell edges
+      for (const edge of cellEdges) {
+        g.setEdge(edge.source, edge.target);
+      }
+
+      // Run dagre layout
+      dagre.layout(g);
+
+      // Apply dagre positions to cells (offset by middle start Y)
+      const cellPositions: Array<{ id: string; x: number; y: number }> = [];
+      let minX = Infinity;
+
+      for (const cell of cells) {
+        const dagreNode = g.node(cell.id);
+        if (dagreNode) {
+          const x = dagreNode.x - (dagreNode.width ?? getNodeSize(cell).width) / 2;
+          const y = middleStartY + (dagreNode.y - (dagreNode.height ?? getNodeSize(cell).height) / 2);
+          minX = Math.min(minX, x);
+          cellPositions.push({ id: cell.id, x, y });
+        }
+      }
+
+      // Normalize X positions to start from padding
+      const offsetX = minX !== Infinity && minX < opts.padding ? opts.padding - minX : 0;
+
+      // Add cells with normalized positions
+      for (const cell of cells) {
+        const pos = cellPositions.find((p) => p.id === cell.id);
+        if (pos) {
+          layoutedNodes.push({
+            ...cell,
+            position: { x: pos.x + offsetX, y: pos.y },
+          });
+        } else {
+          // Fallback if dagre didn't position this cell
+          layoutedNodes.push(cell);
+        }
+      }
+    } else {
+      // No cell-to-cell connections: arrange horizontally in a row
+      let cellX = opts.padding;
+      for (const cell of cells) {
+        const size = getNodeSize(cell);
+        layoutedNodes.push({
+          ...cell,
+          position: { x: cellX, y: middleStartY },
+        });
+        cellX += size.width + opts.nodeSpacingX;
+      }
+    }
+  }
+
+  // Calculate middle zone height
+  const middleMaxY = cells.length > 0
+    ? Math.max(...cells.map((c) => {
+        const pos = layoutedNodes.find((n) => n.id === c.id)?.position ?? { x: 0, y: 0 };
+        const size = getNodeSize(c);
+        return pos.y + size.height;
+      }))
+    : middleStartY;
+
+  // ============================================
+  // ZONE 3: BOTTOM - Externals that cells talk TO
+  // ============================================
+  const bottomStartY = middleMaxY + opts.nodeSpacingY;
+  let bottomX = opts.padding;
+  const bottomSpacing = 120;
+
+  for (const node of bottomNodes) {
+    const size = getNodeSize(node);
+    layoutedNodes.push({
+      ...node,
+      position: { x: bottomX, y: bottomStartY },
+    });
+    bottomX += size.width + bottomSpacing;
+  }
+
+  // Add child nodes (components and gateways) - they use relative positioning
   layoutedNodes.push(...childNodes);
 
   return {
@@ -603,6 +762,7 @@ export function applyLayout(
     edges: state.edges,
   };
 }
+
 
 // ============================================
 // Utility Functions
