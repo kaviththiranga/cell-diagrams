@@ -47,6 +47,173 @@ const CELL_PADDING = 60;
 // ============================================
 
 /**
+ * Layout components within a cell using dagre hierarchical layout.
+ * Positions components based on their internal connections for a cleaner flow-based arrangement.
+ */
+function layoutComponentsWithDagre(
+  components: ComponentDefinition[],
+  internalConnections: Array<{ source: string; target: string }>,
+  hasGateway: boolean,
+  cellWidth: number,
+  cellHeight: number
+): Array<{ id: string; x: number; y: number }> {
+  const componentSize = 50;
+  const nodeSpacing = 80;
+  const componentPositions: Array<{ id: string; x: number; y: number }> = [];
+
+  // Edge cases: no components or single component
+  if (components.length === 0) {
+    return [];
+  }
+
+  if (components.length === 1) {
+    // Center the single component
+    return [{
+      id: components[0]!.id,
+      x: cellWidth / 2 - componentSize / 2,
+      y: cellHeight / 2 - componentSize / 2,
+    }];
+  }
+
+  // Build dagre graph
+  const g = new dagre.graphlib.Graph();
+  g.setDefaultEdgeLabel(() => ({}));
+  g.setGraph({
+    rankdir: 'TB', // Top-to-bottom for hierarchical flow
+    nodesep: nodeSpacing,
+    ranksep: nodeSpacing,
+    marginx: CELL_PADDING,
+    marginy: CELL_PADDING + 30, // Extra space for label
+  });
+
+  // Add components to graph
+  for (const comp of components) {
+    g.setNode(comp.id, {
+      width: componentSize,
+      height: componentSize,
+    });
+  }
+
+  // Add gateway as a node if present (acts as entry/exit point)
+  if (hasGateway) {
+    const gatewayId = 'gateway';
+    g.setNode(gatewayId, {
+      width: 45,
+      height: 45,
+    });
+
+    // Find components connected to gateway (via internal connections)
+    // We'll connect gateway to components that have no incoming connections
+    // or are entry points
+    const componentIds = new Set(components.map(c => c.id));
+    const hasIncoming = new Set<string>();
+    for (const conn of internalConnections) {
+      if (componentIds.has(conn.target)) {
+        hasIncoming.add(conn.target);
+      }
+    }
+
+    // Connect gateway to entry point components (those with no incoming connections)
+    let gatewayConnected = false;
+    for (const comp of components) {
+      if (!hasIncoming.has(comp.id)) {
+        g.setEdge(gatewayId, comp.id);
+        gatewayConnected = true;
+      }
+    }
+    
+    // If all components have incoming connections, connect gateway to the first component
+    // to ensure proper layout positioning
+    if (!gatewayConnected && components.length > 0) {
+      g.setEdge(gatewayId, components[0]!.id);
+    }
+  }
+
+  // Add internal connections as edges
+  for (const conn of internalConnections) {
+    // Only add edge if both source and target are components
+    const sourceIsComponent = components.some(c => c.id === conn.source);
+    const targetIsComponent = components.some(c => c.id === conn.target);
+    
+    if (sourceIsComponent && targetIsComponent) {
+      g.setEdge(conn.source, conn.target);
+    }
+  }
+
+  // If no edges exist, use fallback grid layout
+  if (g.edges().length === 0 && !hasGateway) {
+    // Simple grid fallback for unconnected components
+    const cols = Math.ceil(Math.sqrt(components.length));
+    const rows = Math.ceil(components.length / cols);
+    const gridWidth = cols * (componentSize + nodeSpacing) - nodeSpacing;
+    const gridHeight = rows * (componentSize + nodeSpacing) - nodeSpacing;
+    const startX = (cellWidth - gridWidth) / 2;
+    const startY = (cellHeight - gridHeight) / 2;
+
+    for (let i = 0; i < components.length; i++) {
+      const col = i % cols;
+      const row = Math.floor(i / cols);
+      componentPositions.push({
+        id: components[i]!.id,
+        x: startX + col * (componentSize + nodeSpacing),
+        y: startY + row * (componentSize + nodeSpacing),
+      });
+    }
+    return componentPositions;
+  }
+
+  // Run dagre layout
+  dagre.layout(g);
+
+  // Extract positions and transform to cell-relative coordinates
+  const dagreNodes: Array<{ id: string; x: number; y: number; width: number; height: number }> = [];
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+
+  for (const comp of components) {
+    const dagreNode = g.node(comp.id);
+    if (dagreNode) {
+      const x = dagreNode.x - dagreNode.width / 2;
+      const y = dagreNode.y - dagreNode.height / 2;
+      dagreNodes.push({
+        id: comp.id,
+        x,
+        y,
+        width: dagreNode.width,
+        height: dagreNode.height,
+      });
+      minX = Math.min(minX, x);
+      minY = Math.min(minY, y);
+      maxX = Math.max(maxX, x + dagreNode.width);
+      maxY = Math.max(maxY, y + dagreNode.height);
+    }
+  }
+
+  // Calculate layout bounds
+  const layoutWidth = maxX - minX;
+  const layoutHeight = maxY - minY;
+
+  // Center the layout within the cell, accounting for padding
+  const availableWidth = cellWidth - 2 * CELL_PADDING;
+  const availableHeight = cellHeight - 2 * CELL_PADDING - 30; // Extra space for label
+  const offsetX = CELL_PADDING + (availableWidth - layoutWidth) / 2 - minX;
+  const offsetY = CELL_PADDING + 30 + (availableHeight - layoutHeight) / 2 - minY;
+
+  // Transform positions to cell-relative coordinates
+  for (const node of dagreNodes) {
+    componentPositions.push({
+      id: node.id,
+      x: node.x + offsetX,
+      y: node.y + offsetY,
+    });
+  }
+
+  return componentPositions;
+}
+
+/**
  * Convert a Cell Diagrams AST to React Flow nodes and edges.
  * This creates individual nodes for cells, components, gateways, etc.
  */
@@ -111,29 +278,34 @@ function cellToNodes(
     allComponents.push(...cluster.components);
   }
 
-  // Calculate cell size based on components using circular layout
+  // Calculate cell size based on components using hierarchical layout
   // For a regular octagon with equal sides, we want the cell to be square
   const componentCount = allComponents.length;
   const componentSize = 50; // Size of component node
+  const nodeSpacing = 80; // Spacing between nodes in dagre layout
   
-  // Calculate optimal size based on component count
-  // For circular layout, we need enough space for components arranged in a circle
-  let minRadius: number;
+  // Calculate optimal size based on component count and expected hierarchical layout
+  // Estimate layout dimensions: components arranged in a flow-based hierarchy
+  let estimatedWidth: number;
+  let estimatedHeight: number;
+  
   if (componentCount === 0) {
-    minRadius = 60;
-  } else if (componentCount <= 4) {
-    minRadius = 80;
-  } else if (componentCount <= 8) {
-    minRadius = 100;
+    estimatedWidth = 300;
+    estimatedHeight = 300;
+  } else if (componentCount === 1) {
+    estimatedWidth = 300;
+    estimatedHeight = 300;
   } else {
-    // For many components, use spiral - need more space
-    minRadius = 120 + (componentCount - 8) * 10;
+    // Estimate based on component count and connection topology
+    // For hierarchical layout, estimate width and height based on likely arrangement
+    const cols = Math.ceil(Math.sqrt(componentCount));
+    const rows = Math.ceil(componentCount / cols);
+    estimatedWidth = cols * (componentSize + nodeSpacing) + 2 * CELL_PADDING + 40;
+    estimatedHeight = rows * (componentSize + nodeSpacing) + 2 * CELL_PADDING + 30 + 40; // +30 for label, +40 extra
   }
   
-  // Cell size = 2 * (radius + componentSize/2 + padding) + space for label
-  const radius = minRadius;
-  const baseSize = 2 * (radius + componentSize / 2 + CELL_PADDING) + 40; // +40 for label
-  const cellSize = Math.max(300, baseSize); // Minimum size of 300
+  // Ensure minimum size and make it square for octagon
+  const cellSize = Math.max(300, Math.max(estimatedWidth, estimatedHeight));
   const cellWidth = cellSize;
   const cellHeight = cellSize;
 
@@ -234,41 +406,26 @@ function cellToNodes(
     } as unknown as DiagramNode);
   }
 
-  // Create component nodes positioned inside cell with circular/spiral layout
-  // This better utilizes space and creates a more organic arrangement
-  const centerX = cellWidth / 2;
-  const centerY = cellHeight / 2;
-  
-  // Calculate optimal radius based on component count and cell size
-  // Use a spiral pattern that adapts to the number of components
-  const availableRadius = Math.min(cellWidth, cellHeight) / 2 - componentSize - CELL_PADDING;
-  const layoutRadius = Math.max(minRadius, availableRadius * 0.6); // Use 60% of available space
-  
-  for (let compIndex = 0; compIndex < allComponents.length; compIndex++) {
-    const comp = allComponents[compIndex];
-    if (!comp) continue; // TypeScript guard
+  // Create component nodes positioned inside cell with hierarchical dagre layout
+  // This creates a cleaner flow-based arrangement that follows connection topology
+  const componentPositions = layoutComponentsWithDagre(
+    allComponents,
+    cell.connections,
+    !!cell.gateway,
+    cellWidth,
+    cellHeight
+  );
+
+  // Create component nodes with dagre-calculated positions
+  for (const comp of allComponents) {
+    const position = componentPositions.find(p => p.id === comp.id);
     
-    // Use circular layout: distribute components evenly around a circle
-    // For better space utilization, use golden angle spiral if many components
-    let angle: number;
-    let r: number;
+    // Fallback position if dagre didn't position this component
+    const fallbackX = cellWidth / 2 - componentSize / 2;
+    const fallbackY = cellHeight / 2 - componentSize / 2;
     
-    if (componentCount <= 8) {
-      // For few components, use simple circle
-      angle = (2 * Math.PI * compIndex) / componentCount;
-      r = layoutRadius;
-    } else {
-      // For many components, use golden angle spiral for better distribution
-      const goldenAngle = Math.PI * (3 - Math.sqrt(5)); // Golden angle in radians
-      angle = compIndex * goldenAngle;
-      // Spiral outwards based on index
-      const spiralFactor = Math.sqrt(compIndex / componentCount);
-      r = minRadius + (layoutRadius - minRadius) * spiralFactor;
-    }
-    
-    // Calculate position
-    const x = centerX + r * Math.cos(angle) - componentSize / 2;
-    const y = centerY + r * Math.sin(angle) - componentSize / 2;
+    const x = position ? position.x : fallbackX;
+    const y = position ? position.y : fallbackY;
     
     // Ensure components stay within cell bounds (accounting for padding)
     const boundedX = Math.max(CELL_PADDING, Math.min(cellWidth - CELL_PADDING - componentSize, x));
