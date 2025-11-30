@@ -10,7 +10,6 @@
 import type {
   Position,
   BoundingBox,
-  CellDimensions,
   LayoutEngineOptions,
   DiagramLayoutData,
   LayoutResult,
@@ -26,7 +25,7 @@ import { GridLayout } from './algorithms/GridLayout';
 import { TwoGraphStrategy } from './strategies/TwoGraphStrategy';
 import { CellSizer } from './strategies/CellSizer';
 import { OverlapResolver } from './strategies/OverlapResolver';
-import { BoundaryPositioner, CellBounds } from './strategies/BoundaryPositioner';
+import { BoundaryPositioner } from './strategies/BoundaryPositioner';
 import { BezierRouter } from './routing/BezierRouter';
 import { getPortPosition, getBestPortAlignment } from './routing/PathUtils';
 
@@ -82,7 +81,10 @@ export class LayoutEngine implements ILayoutEngine {
   }
 
   /**
-   * Perform complete layout on diagram data
+   * Perform complete layout on diagram data using three-zone approach:
+   * - Header Zone: Users and externals connecting TO cells (northbound)
+   * - Middle Zone: Cells arranged horizontally
+   * - Bottom Zone: Externals that cells connect TO (southbound)
    */
   layout(diagram: DiagramLayoutData): LayoutResult {
     const result: LayoutResult = {
@@ -92,7 +94,9 @@ export class LayoutEngine implements ILayoutEngine {
       bounds: { minX: 0, minY: 0, maxX: 0, maxY: 0 },
     };
 
-    // 1. Layout each cell's internal components
+    const { padding } = { padding: 50 }; // Default padding
+
+    // 1. Layout each cell's internal components to get dimensions
     const cellResults = new Map<string, CellLayoutResult>();
     diagram.cells.forEach((cell) => {
       const cellResult = this.layoutCell(cell.components, cell.internalConnections);
@@ -100,7 +104,7 @@ export class LayoutEngine implements ILayoutEngine {
       result.cellDimensions.set(cell.id, cellResult.dimensions);
     });
 
-    // 2. Layout cells relative to each other using Dagre
+    // 2. Layout cells relative to each other using Dagre (at origin first)
     const cellNodes: LayoutNode[] = diagram.cells.map((cell) => {
       const dims = result.cellDimensions.get(cell.id)!;
       return {
@@ -110,21 +114,59 @@ export class LayoutEngine implements ILayoutEngine {
       };
     });
 
-    const cellPositions = this.layoutCells(
+    const relativeCellPositions = this.layoutCells(
       cellNodes,
       diagram.interCellConnections
     );
 
-    // 3. Position cells and their internal components
+    // 3. Calculate header zone height based on externals
+    const cellIds = new Set(diagram.cells.map(c => c.id));
+    const headerNodes = diagram.externals.filter(ext => {
+      // Users always go to header
+      if (ext.type === 'user') return true;
+
+      // Check if external connects TO a cell (northbound)
+      const conn = diagram.connections.find(c =>
+        c.source === ext.id || c.target === ext.id
+      );
+      if (!conn) return true; // Default to header if no connection
+
+      const connData = conn.data as { direction?: string } | undefined;
+      return connData?.direction === 'northbound' ||
+             (conn.source === ext.id && cellIds.has(conn.target.split('.')[0] ?? ''));
+    });
+
+    const bottomNodes = diagram.externals.filter(ext => !headerNodes.includes(ext));
+
+    // Calculate header zone dimensions
+    const headerHeight = headerNodes.length > 0
+      ? Math.max(...headerNodes.map(n => n.height || 100))
+      : 0;
+    const headerZoneBottom = headerNodes.length > 0
+      ? padding + headerHeight + this.options.externalOffset
+      : padding;
+
+    // 4. Offset cell positions to start after header zone
+    const cellBounds = this.getBounds(relativeCellPositions, cellNodes);
+    const cellOffsetX = padding - cellBounds.minX;
+    const cellOffsetY = headerZoneBottom - cellBounds.minY;
+
+    const cellPositions = new Map<string, Position>();
+    relativeCellPositions.forEach((pos, id) => {
+      cellPositions.set(id, {
+        x: pos.x + cellOffsetX,
+        y: pos.y + cellOffsetY,
+      });
+    });
+
+    // 5. Store cell positions and internal components
     cellPositions.forEach((cellPos, cellId) => {
-      // Store cell position
       result.nodes.set(cellId, {
         ...cellPos,
         width: result.cellDimensions.get(cellId)!.width,
         height: result.cellDimensions.get(cellId)!.height,
       });
 
-      // Offset internal components relative to cell position
       const cellResult = cellResults.get(cellId);
       if (cellResult) {
         const dims = result.cellDimensions.get(cellId)!;
@@ -132,34 +174,70 @@ export class LayoutEngine implements ILayoutEngine {
           result.nodes.set(compId, {
             x: cellPos.x + dims.contentOffset.x + compPos.x,
             y: cellPos.y + dims.contentOffset.y + compPos.y,
-            width: 80, // Default component width
-            height: 80, // Default component height
+            width: 80,
+            height: 80,
           });
         });
       }
     });
 
-    // 4. Position external nodes based on boundaries
-    const cellBoundsList = this.buildCellBounds(cellPositions, result.cellDimensions);
-    const externalPositions = this.boundaryPositioner.positionExternals(
-      diagram.externals,
-      cellBoundsList,
-      diagram.connections
+    // 6. Calculate actual cell bounds after positioning
+    const actualCellBounds = this.calculateBounds(
+      new Map(
+        Array.from(cellPositions.entries()).map(([id, pos]) => [
+          id,
+          { ...pos, width: result.cellDimensions.get(id)!.width, height: result.cellDimensions.get(id)!.height }
+        ])
+      )
     );
 
-    externalPositions.forEach((pos, id) => {
-      const ext = diagram.externals.find((e) => e.id === id);
-      result.nodes.set(id, {
-        ...pos,
-        width: ext?.width || 80,
-        height: ext?.height || 80,
-      });
-    });
+    // 7. Position header nodes (centered above cells)
+    if (headerNodes.length > 0) {
+      const totalWidth = headerNodes.reduce(
+        (sum, n) => sum + (n.width || 100) + this.options.externalSpacing,
+        -this.options.externalSpacing
+      );
+      const cellCenterX = (actualCellBounds.minX + actualCellBounds.maxX) / 2;
+      let currentX = cellCenterX - totalWidth / 2;
 
-    // 5. Route all edges
+      headerNodes.forEach((node) => {
+        const nodeWidth = node.width || 100;
+        result.nodes.set(node.id, {
+          x: currentX,
+          y: padding,
+          width: nodeWidth,
+          height: node.height || 100,
+        });
+        currentX += nodeWidth + this.options.externalSpacing;
+      });
+    }
+
+    // 8. Position bottom nodes (centered below cells)
+    if (bottomNodes.length > 0) {
+      const bottomZoneTop = actualCellBounds.maxY + this.options.externalOffset;
+      const totalWidth = bottomNodes.reduce(
+        (sum, n) => sum + (n.width || 100) + this.options.externalSpacing,
+        -this.options.externalSpacing
+      );
+      const cellCenterX = (actualCellBounds.minX + actualCellBounds.maxX) / 2;
+      let currentX = cellCenterX - totalWidth / 2;
+
+      bottomNodes.forEach((node) => {
+        const nodeWidth = node.width || 100;
+        result.nodes.set(node.id, {
+          x: currentX,
+          y: bottomZoneTop,
+          width: nodeWidth,
+          height: node.height || 100,
+        });
+        currentX += nodeWidth + this.options.externalSpacing;
+      });
+    }
+
+    // 9. Route all edges
     this.routeEdges(diagram.connections, result);
 
-    // 6. Calculate total bounds
+    // 10. Calculate total bounds
     result.bounds = this.calculateBounds(result.nodes);
 
     return result;
@@ -314,31 +392,6 @@ export class LayoutEngine implements ILayoutEngine {
         targetPort: ports.target,
       });
     });
-  }
-
-  /**
-   * Build cell bounds array from positions and dimensions
-   */
-  private buildCellBounds(
-    positions: Map<string, Position>,
-    dimensions: Map<string, CellDimensions>
-  ): CellBounds[] {
-    const bounds: CellBounds[] = [];
-
-    positions.forEach((pos, id) => {
-      const dims = dimensions.get(id);
-      if (dims) {
-        bounds.push({
-          id,
-          x: pos.x,
-          y: pos.y,
-          width: dims.width,
-          height: dims.height,
-        });
-      }
-    });
-
-    return bounds;
   }
 
   /**

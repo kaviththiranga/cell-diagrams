@@ -889,88 +889,22 @@ export function applyLayout(
   }
 
   // ============================================
-  // ZONE 2: MIDDLE - Cells arranged horizontally with intelligent wrapping
+  // ZONE 2: MIDDLE - Cells arranged horizontally
   // ============================================
   const middleStartY = headerNodes.length > 0
     ? headerY + 150 + opts.nodeSpacingY
     : opts.padding;
 
-  // Use dagre for cell-to-cell layout (horizontal priority)
+  // Arrange cells horizontally in a row
   if (cells.length > 0) {
-    const cellEdges = state.edges.filter(
-      (e) => cellIds.has(e.source) && cellIds.has(e.target)
-    );
-
-    if (cellEdges.length > 0) {
-      // Use dagre for cells with connections
-      const g = new dagre.graphlib.Graph();
-      g.setDefaultEdgeLabel(() => ({}));
-      g.setGraph({
-        rankdir: 'LR', // Left-to-right for horizontal arrangement
-        nodesep: opts.nodeSpacingX,
-        ranksep: opts.nodeSpacingY,
-        marginx: 0,
-        marginy: 0,
+    let cellX = opts.padding;
+    for (const cell of cells) {
+      const size = getNodeSize(cell);
+      layoutedNodes.push({
+        ...cell,
+        position: { x: cellX, y: middleStartY },
       });
-
-      // Add cells to dagre graph
-      for (const cell of cells) {
-        const size = getNodeSize(cell);
-        g.setNode(cell.id, {
-          width: size.width,
-          height: size.height,
-        });
-      }
-
-      // Add cell-to-cell edges
-      for (const edge of cellEdges) {
-        g.setEdge(edge.source, edge.target);
-      }
-
-      // Run dagre layout
-      dagre.layout(g);
-
-      // Apply dagre positions to cells (offset by middle start Y)
-      const cellPositions: Array<{ id: string; x: number; y: number }> = [];
-      let minX = Infinity;
-
-      for (const cell of cells) {
-        const dagreNode = g.node(cell.id);
-        if (dagreNode) {
-          const x = dagreNode.x - (dagreNode.width ?? getNodeSize(cell).width) / 2;
-          const y = middleStartY + (dagreNode.y - (dagreNode.height ?? getNodeSize(cell).height) / 2);
-          minX = Math.min(minX, x);
-          cellPositions.push({ id: cell.id, x, y });
-        }
-      }
-
-      // Normalize X positions to start from padding
-      const offsetX = minX !== Infinity && minX < opts.padding ? opts.padding - minX : 0;
-
-      // Add cells with normalized positions
-      for (const cell of cells) {
-        const pos = cellPositions.find((p) => p.id === cell.id);
-        if (pos) {
-          layoutedNodes.push({
-            ...cell,
-            position: { x: pos.x + offsetX, y: pos.y },
-          });
-        } else {
-          // Fallback if dagre didn't position this cell
-          layoutedNodes.push(cell);
-        }
-      }
-    } else {
-      // No cell-to-cell connections: arrange horizontally in a row
-      let cellX = opts.padding;
-      for (const cell of cells) {
-        const size = getNodeSize(cell);
-        layoutedNodes.push({
-          ...cell,
-          position: { x: cellX, y: middleStartY },
-        });
-        cellX += size.width + opts.nodeSpacingX;
-      }
+      cellX += size.width + opts.nodeSpacingX;
     }
   }
 
@@ -1255,7 +1189,15 @@ export function applyLayoutWithEngine(
   const result = engine.layout(layoutData);
 
   // Apply positions to nodes
+  // NOTE: Child nodes (components, gateways) keep their relative positions
+  // calculated by cellToNodes - we only reposition top-level nodes
   const layoutedNodes: DiagramNode[] = state.nodes.map((node) => {
+    // Skip child nodes - they use relative positioning within their parent cell
+    // The positions are already calculated correctly in cellToNodes
+    if (node.parentId) {
+      return node;
+    }
+
     const position = result.nodes.get(node.id);
     if (position) {
       // Update cell dimensions if applicable

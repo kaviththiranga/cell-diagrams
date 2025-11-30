@@ -1,8 +1,10 @@
 /**
  * Boundary Positioner
  *
- * Positions external nodes (users, externals) around cell boundaries
- * based on their connection direction (north, south, east, west).
+ * Positions external nodes (users, externals) in a three-zone layout:
+ * - Header Zone: Nodes connecting TO cells (northbound)
+ * - Middle Zone: Cells (handled separately)
+ * - Bottom Zone: Nodes that cells connect TO (southbound)
  *
  * Based on: cell-diagram/src/utils/projectUtils.ts (lines 205-287)
  */
@@ -12,7 +14,6 @@ import type {
   Dimensions,
   BoundingBox,
   CellBound,
-  LayoutNode,
   LayoutEdge,
   ExternalLayoutData,
 } from '../types';
@@ -26,13 +27,16 @@ export interface BoundaryPositionerOptions {
   defaultNodeWidth: number;
   /** Default height for external nodes */
   defaultNodeHeight: number;
+  /** Padding from diagram edges */
+  padding: number;
 }
 
 const DEFAULT_BOUNDARY_OPTIONS: BoundaryPositionerOptions = {
   offset: 150,
-  spacing: 50,
-  defaultNodeWidth: 80,
-  defaultNodeHeight: 80,
+  spacing: 120,
+  defaultNodeWidth: 100,
+  defaultNodeHeight: 100,
+  padding: 50,
 };
 
 /** Cell bounds information */
@@ -40,8 +44,20 @@ export interface CellBounds extends Position, Dimensions {
   id: string;
 }
 
+/** Result of three-zone positioning */
+export interface ThreeZoneResult {
+  /** Positioned nodes */
+  positions: Map<string, Position>;
+  /** Y coordinate where header zone ends */
+  headerZoneBottom: number;
+  /** Y coordinate where middle zone starts (for cells) */
+  middleZoneTop: number;
+  /** Y coordinate where bottom zone starts */
+  bottomZoneTop: number;
+}
+
 /**
- * Positions external nodes around cell boundaries
+ * Positions external nodes in a three-zone layout
  */
 export class BoundaryPositioner {
   private options: BoundaryPositionerOptions;
@@ -51,12 +67,153 @@ export class BoundaryPositioner {
   }
 
   /**
-   * Position external nodes around cells
+   * Position external nodes in three zones based on connection direction.
    *
    * @param externals External nodes to position
-   * @param cellBounds Bounds of all cells
-   * @param connections Connections to determine which boundary
-   * @returns Positioned external nodes
+   * @param connections All connections to determine direction
+   * @param cellIds Set of cell IDs to identify cell connections
+   * @param cellBounds Combined bounding box of all cells (after cell layout)
+   * @returns Positioned external nodes and zone boundaries
+   */
+  positionInThreeZones(
+    externals: ExternalLayoutData[],
+    connections: LayoutEdge[],
+    cellIds: Set<string>,
+    cellBounds: BoundingBox
+  ): ThreeZoneResult {
+    const positions = new Map<string, Position>();
+    const { padding, spacing, defaultNodeWidth, defaultNodeHeight, offset } = this.options;
+
+    // Categorize externals into header (northbound) and bottom (southbound)
+    const headerNodes: ExternalLayoutData[] = [];
+    const bottomNodes: ExternalLayoutData[] = [];
+
+    // Build a map of external -> direction based on connections
+    const externalDirections = this.analyzeConnections(externals, connections, cellIds);
+
+    externals.forEach((ext) => {
+      const direction = externalDirections.get(ext.id);
+
+      if (direction === 'north' || ext.type === 'user') {
+        // Users and north-facing connections go to header
+        headerNodes.push(ext);
+      } else {
+        // Everything else (south, east, west, or no connection) goes to bottom
+        bottomNodes.push(ext);
+      }
+    });
+
+    // Calculate zone positions
+    const headerZoneTop = padding;
+    const headerHeight = headerNodes.length > 0
+      ? Math.max(...headerNodes.map(n => n.height || defaultNodeHeight))
+      : 0;
+    const headerZoneBottom = headerNodes.length > 0
+      ? headerZoneTop + headerHeight + offset
+      : padding;
+
+    // Middle zone is where cells will be placed
+    const middleZoneTop = headerZoneBottom;
+
+    // Bottom zone starts after cells
+    const bottomZoneTop = cellBounds.maxY + offset;
+
+    // Position header nodes (centered above cells)
+    if (headerNodes.length > 0) {
+      const totalWidth = headerNodes.reduce((sum, n) =>
+        sum + (n.width || defaultNodeWidth) + spacing, -spacing
+      );
+
+      // Center the header nodes over the cell area
+      const cellCenterX = (cellBounds.minX + cellBounds.maxX) / 2;
+      let currentX = cellCenterX - totalWidth / 2;
+
+      headerNodes.forEach((node) => {
+        const nodeWidth = node.width || defaultNodeWidth;
+
+        positions.set(node.id, {
+          x: currentX,
+          y: headerZoneTop,
+        });
+
+        currentX += nodeWidth + spacing;
+      });
+    }
+
+    // Position bottom nodes (centered below cells)
+    if (bottomNodes.length > 0) {
+      const totalWidth = bottomNodes.reduce((sum, n) =>
+        sum + (n.width || defaultNodeWidth) + spacing, -spacing
+      );
+
+      // Center the bottom nodes under the cell area
+      const cellCenterX = (cellBounds.minX + cellBounds.maxX) / 2;
+      let currentX = cellCenterX - totalWidth / 2;
+
+      bottomNodes.forEach((node) => {
+        const nodeWidth = node.width || defaultNodeWidth;
+
+        positions.set(node.id, {
+          x: currentX,
+          y: bottomZoneTop,
+        });
+
+        currentX += nodeWidth + spacing;
+      });
+    }
+
+    return {
+      positions,
+      headerZoneBottom,
+      middleZoneTop,
+      bottomZoneTop,
+    };
+  }
+
+  /**
+   * Analyze connections to determine external node directions
+   */
+  private analyzeConnections(
+    externals: ExternalLayoutData[],
+    connections: LayoutEdge[],
+    cellIds: Set<string>
+  ): Map<string, CellBound> {
+    const directions = new Map<string, CellBound>();
+    const externalIds = new Set(externals.map(e => e.id));
+
+    connections.forEach((conn) => {
+      // Get base IDs (strip component suffixes like "Cell.Component")
+      const sourceBase = conn.source.split('.')[0] ?? conn.source;
+      const targetBase = conn.target.split('.')[0] ?? conn.target;
+
+      const sourceIsExternal = externalIds.has(sourceBase);
+      const targetIsExternal = externalIds.has(targetBase);
+      const sourceIsCell = cellIds.has(sourceBase);
+      const targetIsCell = cellIds.has(targetBase);
+
+      // Check connection data for explicit direction
+      const connData = conn.data as { direction?: string } | undefined;
+      const direction = connData?.direction;
+
+      // External -> Cell (external is source, connects TO a cell)
+      if (sourceIsExternal && targetIsCell) {
+        // This external connects TO a cell, so it's "incoming" = northbound
+        directions.set(sourceBase, direction as CellBound || 'north');
+      }
+
+      // Cell -> External (cell is source, connects TO external)
+      if (sourceIsCell && targetIsExternal) {
+        // This external receives from a cell, so it's "outgoing" = southbound
+        directions.set(targetBase, direction as CellBound || 'south');
+      }
+    });
+
+    return directions;
+  }
+
+  /**
+   * Position external nodes relative to specific cells (original behavior).
+   * Use this when you don't want three-zone layout.
    */
   positionExternals(
     externals: ExternalLayoutData[],
@@ -242,51 +399,6 @@ export class BoundaryPositioner {
     });
 
     return { minX, minY, maxX, maxY };
-  }
-
-  /**
-   * Position a single external relative to a cell boundary
-   */
-  positionRelativeToCell(
-    node: LayoutNode,
-    cell: CellBounds,
-    bound: CellBound
-  ): Position {
-    const { offset, defaultNodeWidth, defaultNodeHeight } = this.options;
-    const nodeWidth = node.width || defaultNodeWidth;
-    const nodeHeight = node.height || defaultNodeHeight;
-
-    switch (bound) {
-      case 'north':
-        return {
-          x: cell.x + cell.width / 2 - nodeWidth / 2,
-          y: cell.y - offset - nodeHeight,
-        };
-
-      case 'south':
-        return {
-          x: cell.x + cell.width / 2 - nodeWidth / 2,
-          y: cell.y + cell.height + offset,
-        };
-
-      case 'east':
-        return {
-          x: cell.x + cell.width + offset,
-          y: cell.y + cell.height / 2 - nodeHeight / 2,
-        };
-
-      case 'west':
-        return {
-          x: cell.x - offset - nodeWidth,
-          y: cell.y + cell.height / 2 - nodeHeight / 2,
-        };
-
-      default:
-        return {
-          x: cell.x + cell.width / 2 - nodeWidth / 2,
-          y: cell.y - offset - nodeHeight,
-        };
-    }
   }
 
   /**
