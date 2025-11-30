@@ -82,10 +82,11 @@ export class LayoutEngine implements ILayoutEngine {
   }
 
   /**
-   * Perform complete layout on diagram data using three-zone approach:
-   * - Header Zone: Users and externals connecting TO cells (northbound)
-   * - Middle Zone: Cells arranged HORIZONTALLY
-   * - Bottom Zone: Externals that cells connect TO (southbound)
+   * Perform complete layout on diagram data using four-zone approach:
+   * - Zone 1 (Top): Users/clients
+   * - Zone 2: Northbound externals (frontends connecting TO cells)
+   * - Zone 3 (Middle): Cells arranged HORIZONTALLY
+   * - Zone 4 (Bottom): Southbound externals (cells connect TO these)
    */
   layout(diagram: DiagramLayoutData): LayoutResult {
     const result: LayoutResult = {
@@ -96,6 +97,7 @@ export class LayoutEngine implements ILayoutEngine {
     };
 
     const padding = 50;
+    const levelSpacing = 80; // Spacing between levels
 
     // 1. Layout each cell's internal components to get dimensions
     const cellResults = new Map<string, CellLayoutResult>();
@@ -105,15 +107,19 @@ export class LayoutEngine implements ILayoutEngine {
       result.cellDimensions.set(cell.id, cellResult.dimensions);
     });
 
-    // 2. Categorize externals into header (northbound) vs bottom (southbound)
+    // 2. Categorize externals into four zones:
+    //    - userNodes: Users/clients (top level)
+    //    - northboundNodes: Externals connecting TO cells (second level)
+    //    - bottomNodes: Externals that cells connect TO (southbound)
     const cellIds = new Set(diagram.cells.map(c => c.id));
-    const headerNodes: ExternalLayoutData[] = [];
+    const userNodes: ExternalLayoutData[] = [];
+    const northboundNodes: ExternalLayoutData[] = [];
     const bottomNodes: ExternalLayoutData[] = [];
 
     for (const ext of diagram.externals) {
-      // Users always go to header
+      // Users always go to top level
       if (ext.type === 'user') {
-        headerNodes.push(ext);
+        userNodes.push(ext);
         continue;
       }
 
@@ -135,7 +141,7 @@ export class LayoutEngine implements ILayoutEngine {
             } else if (direction === 'southbound') {
               isSouthbound = true;
             } else {
-              // No direction specified, default to header if connecting to cell
+              // No direction specified, default to northbound if connecting to cell
               isNorthbound = true;
             }
           }
@@ -162,27 +168,35 @@ export class LayoutEngine implements ILayoutEngine {
       if (isSouthbound && !isNorthbound) {
         bottomNodes.push(ext);
       } else {
-        // Default to header for externals
-        headerNodes.push(ext);
+        // Northbound externals go to second level
+        northboundNodes.push(ext);
       }
     }
 
-    // 3. Calculate header zone dimensions
-    const headerHeight = headerNodes.length > 0
-      ? Math.max(...headerNodes.map(n => n.height || 100))
+    // 3. Calculate zone heights
+    const userHeight = userNodes.length > 0
+      ? Math.max(...userNodes.map(n => n.height || 100))
       : 0;
-    const headerZoneBottom = headerNodes.length > 0
-      ? padding + headerHeight + this.options.externalOffset
+    const northboundHeight = northboundNodes.length > 0
+      ? Math.max(...northboundNodes.map(n => n.height || 100))
+      : 0;
+
+    // Calculate Y positions for each zone
+    const userZoneY = padding;
+    const northboundZoneY = userNodes.length > 0
+      ? userZoneY + userHeight + levelSpacing
       : padding;
+    const cellZoneY = northboundNodes.length > 0
+      ? northboundZoneY + northboundHeight + this.options.externalOffset
+      : (userNodes.length > 0 ? userZoneY + userHeight + this.options.externalOffset : padding);
 
     // 4. Arrange cells HORIZONTALLY in the middle zone
     const cellPositions = new Map<string, Position>();
     let cellX = padding;
-    const cellY = headerZoneBottom;
 
     for (const cell of diagram.cells) {
       const dims = result.cellDimensions.get(cell.id)!;
-      cellPositions.set(cell.id, { x: cellX, y: cellY });
+      cellPositions.set(cell.id, { x: cellX, y: cellZoneY });
       cellX += dims.width + this.options.nodeSpacing;
     }
 
@@ -218,47 +232,260 @@ export class LayoutEngine implements ILayoutEngine {
       )
     );
 
-    // 7. Position header nodes (centered above cells)
-    if (headerNodes.length > 0) {
-      const totalWidth = headerNodes.reduce(
-        (sum, n) => sum + (n.width || 100) + this.options.externalSpacing,
-        -this.options.externalSpacing
-      );
-      const cellCenterX = (actualCellBounds.minX + actualCellBounds.maxX) / 2;
-      let currentX = cellCenterX - totalWidth / 2;
+    // 7. Position user nodes (Zone 1 - top level)
+    // Users are positioned based on which frontend apps they connect to
+    if (userNodes.length > 0) {
+      // Build map of user -> connected externals (frontends)
+      const userConnections = new Map<string, string[]>();
+      for (const user of userNodes) {
+        const connectedExternals: string[] = [];
+        for (const conn of diagram.connections) {
+          if (conn.source === user.id) {
+            // Check if target is a northbound external
+            const isNorthboundTarget = northboundNodes.some(n => n.id === conn.target);
+            if (isNorthboundTarget && !connectedExternals.includes(conn.target)) {
+              connectedExternals.push(conn.target);
+            }
+          }
+        }
+        userConnections.set(user.id, connectedExternals);
+      }
 
-      headerNodes.forEach((node) => {
-        const nodeWidth = node.width || 100;
-        result.nodes.set(node.id, {
-          x: currentX,
-          y: padding,
-          width: nodeWidth,
-          height: node.height || 100,
-        });
-        currentX += nodeWidth + this.options.externalSpacing;
-      });
+      // We'll position users after northbound externals are positioned
+      // For now, collect user positioning data
+      const userPositionData = userNodes.map(user => ({
+        node: user,
+        connectedExternals: userConnections.get(user.id) || [],
+      }));
+
+      // Store for later positioning after northbound nodes
+      (result as unknown as { _userPositionData: typeof userPositionData })._userPositionData = userPositionData;
     }
 
-    // 8. Position bottom nodes (centered below cells)
-    if (bottomNodes.length > 0) {
-      const bottomZoneTop = actualCellBounds.maxY + this.options.externalOffset;
-      const totalWidth = bottomNodes.reduce(
-        (sum, n) => sum + (n.width || 100) + this.options.externalSpacing,
-        -this.options.externalSpacing
-      );
-      const cellCenterX = (actualCellBounds.minX + actualCellBounds.maxX) / 2;
-      let currentX = cellCenterX - totalWidth / 2;
+    // 8. Position northbound external nodes (Zone 2 - second level)
+    const northboundPositionMap = new Map<string, number>(); // Store X positions for user alignment
+    if (northboundNodes.length > 0) {
+      // Build map of northbound node -> connected cells
+      const northboundNodeConnections = new Map<string, string[]>();
+      for (const node of northboundNodes) {
+        const connectedCells: string[] = [];
+        for (const conn of diagram.connections) {
+          if (conn.source === node.id) {
+            const targetBase = conn.target.split('.')[0] ?? '';
+            if (cellIds.has(targetBase) && !connectedCells.includes(targetBase)) {
+              connectedCells.push(targetBase);
+            }
+          }
+          if (conn.target === node.id) {
+            const sourceBase = conn.source.split('.')[0] ?? '';
+            if (cellIds.has(sourceBase) && !connectedCells.includes(sourceBase)) {
+              connectedCells.push(sourceBase);
+            }
+          }
+        }
+        northboundNodeConnections.set(node.id, connectedCells);
+      }
 
-      bottomNodes.forEach((node) => {
-        const nodeWidth = node.width || 100;
+      // Calculate target X for each northbound node based on connected cells
+      const northboundPositions: Array<{ node: ExternalLayoutData; targetX: number }> = [];
+      for (const node of northboundNodes) {
+        const connectedCells = northboundNodeConnections.get(node.id) || [];
+        let targetX: number;
+
+        if (connectedCells.length > 0) {
+          // Position above the average center of connected cells
+          const cellCenters = connectedCells.map(cellId => {
+            const cellPos = cellPositions.get(cellId);
+            const cellDims = result.cellDimensions.get(cellId);
+            if (cellPos && cellDims) {
+              return cellPos.x + cellDims.width / 2;
+            }
+            return 0;
+          });
+          targetX = cellCenters.reduce((a, b) => a + b, 0) / cellCenters.length;
+        } else {
+          // Default to center if no connections
+          targetX = (actualCellBounds.minX + actualCellBounds.maxX) / 2;
+        }
+        northboundPositions.push({ node, targetX });
+      }
+
+      // Sort by target X to maintain left-to-right order
+      northboundPositions.sort((a, b) => a.targetX - b.targetX);
+
+      // Position nodes with collision avoidance
+      const nodeWidth = 100;
+      const minSpacing = this.options.externalSpacing;
+      const placedPositions: Array<{ x: number; width: number }> = [];
+
+      for (const { node, targetX } of northboundPositions) {
+        const width = node.width || nodeWidth;
+        let finalX = targetX - width / 2;
+
+        // Check for collisions with already placed nodes and adjust
+        for (const placed of placedPositions) {
+          const overlap = (finalX < placed.x + placed.width + minSpacing) &&
+                         (finalX + width > placed.x - minSpacing);
+          if (overlap) {
+            // Move to the right of the placed node
+            finalX = Math.max(finalX, placed.x + placed.width + minSpacing);
+          }
+        }
+
         result.nodes.set(node.id, {
-          x: currentX,
-          y: bottomZoneTop,
-          width: nodeWidth,
+          x: finalX,
+          y: northboundZoneY,
+          width,
           height: node.height || 100,
         });
-        currentX += nodeWidth + this.options.externalSpacing;
-      });
+        placedPositions.push({ x: finalX, width });
+        northboundPositionMap.set(node.id, finalX + width / 2); // Store center X
+      }
+    }
+
+    // Now position users based on their connected frontends
+    if (userNodes.length > 0) {
+      const userPositions: Array<{ node: ExternalLayoutData; targetX: number }> = [];
+
+      for (const user of userNodes) {
+        // Find connected frontends
+        const connectedExternals: string[] = [];
+        for (const conn of diagram.connections) {
+          if (conn.source === user.id) {
+            const isNorthboundTarget = northboundNodes.some(n => n.id === conn.target);
+            if (isNorthboundTarget) {
+              connectedExternals.push(conn.target);
+            }
+          }
+        }
+
+        let targetX: number;
+        if (connectedExternals.length > 0) {
+          // Position above connected frontends
+          const frontendCenters = connectedExternals
+            .map(id => northboundPositionMap.get(id))
+            .filter((x): x is number => x !== undefined);
+          if (frontendCenters.length > 0) {
+            targetX = frontendCenters.reduce((a, b) => a + b, 0) / frontendCenters.length;
+          } else {
+            targetX = (actualCellBounds.minX + actualCellBounds.maxX) / 2;
+          }
+        } else {
+          // Default to center
+          targetX = (actualCellBounds.minX + actualCellBounds.maxX) / 2;
+        }
+        userPositions.push({ node: user, targetX });
+      }
+
+      // Sort by target X
+      userPositions.sort((a, b) => a.targetX - b.targetX);
+
+      // Position with collision avoidance
+      const nodeWidth = 100;
+      const minSpacing = this.options.externalSpacing;
+      const placedPositions: Array<{ x: number; width: number }> = [];
+
+      for (const { node, targetX } of userPositions) {
+        const width = node.width || nodeWidth;
+        let finalX = targetX - width / 2;
+
+        for (const placed of placedPositions) {
+          const overlap = (finalX < placed.x + placed.width + minSpacing) &&
+                         (finalX + width > placed.x - minSpacing);
+          if (overlap) {
+            finalX = Math.max(finalX, placed.x + placed.width + minSpacing);
+          }
+        }
+
+        result.nodes.set(node.id, {
+          x: finalX,
+          y: userZoneY,
+          width,
+          height: node.height || 100,
+        });
+        placedPositions.push({ x: finalX, width });
+      }
+    }
+
+    // 9. Position bottom nodes (Zone 4) - align with connected cells to reduce overlaps
+    if (bottomNodes.length > 0) {
+      const bottomZoneTop = actualCellBounds.maxY + this.options.externalOffset;
+
+      // Build map of bottom node -> connected cells
+      const bottomNodeConnections = new Map<string, string[]>();
+      for (const node of bottomNodes) {
+        const connectedCells: string[] = [];
+        for (const conn of diagram.connections) {
+          if (conn.source === node.id) {
+            const targetBase = conn.target.split('.')[0] ?? '';
+            if (cellIds.has(targetBase) && !connectedCells.includes(targetBase)) {
+              connectedCells.push(targetBase);
+            }
+          }
+          if (conn.target === node.id) {
+            const sourceBase = conn.source.split('.')[0] ?? '';
+            if (cellIds.has(sourceBase) && !connectedCells.includes(sourceBase)) {
+              connectedCells.push(sourceBase);
+            }
+          }
+        }
+        bottomNodeConnections.set(node.id, connectedCells);
+      }
+
+      // Calculate target X for each bottom node based on connected cells
+      const bottomPositions: Array<{ node: ExternalLayoutData; targetX: number }> = [];
+      for (const node of bottomNodes) {
+        const connectedCells = bottomNodeConnections.get(node.id) || [];
+        let targetX: number;
+
+        if (connectedCells.length > 0) {
+          // Position below the average center of connected cells
+          const cellCenters = connectedCells.map(cellId => {
+            const cellPos = cellPositions.get(cellId);
+            const cellDims = result.cellDimensions.get(cellId);
+            if (cellPos && cellDims) {
+              return cellPos.x + cellDims.width / 2;
+            }
+            return 0;
+          });
+          targetX = cellCenters.reduce((a, b) => a + b, 0) / cellCenters.length;
+        } else {
+          // Default to center if no connections
+          targetX = (actualCellBounds.minX + actualCellBounds.maxX) / 2;
+        }
+        bottomPositions.push({ node, targetX });
+      }
+
+      // Sort by target X to maintain left-to-right order
+      bottomPositions.sort((a, b) => a.targetX - b.targetX);
+
+      // Position nodes with collision avoidance
+      const nodeWidth = 100;
+      const minSpacing = this.options.externalSpacing;
+      const placedPositions: Array<{ x: number; width: number }> = [];
+
+      for (const { node, targetX } of bottomPositions) {
+        const width = node.width || nodeWidth;
+        let finalX = targetX - width / 2;
+
+        // Check for collisions with already placed nodes and adjust
+        for (const placed of placedPositions) {
+          const overlap = (finalX < placed.x + placed.width + minSpacing) &&
+                         (finalX + width > placed.x - minSpacing);
+          if (overlap) {
+            // Move to the right of the placed node
+            finalX = Math.max(finalX, placed.x + placed.width + minSpacing);
+          }
+        }
+
+        result.nodes.set(node.id, {
+          x: finalX,
+          y: bottomZoneTop,
+          width,
+          height: node.height || 100,
+        });
+        placedPositions.push({ x: finalX, width });
+      }
     }
 
     // 9. Route all edges
