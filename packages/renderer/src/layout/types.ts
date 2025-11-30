@@ -163,6 +163,11 @@ export interface CellLayoutData {
     id: string;
     position: PortAlignment;
   } | undefined;
+  /** Pre-calculated dimensions from the converter (if available) */
+  dimensions?: {
+    width: number;
+    height: number;
+  } | undefined;
 }
 
 /** External node data for layout */

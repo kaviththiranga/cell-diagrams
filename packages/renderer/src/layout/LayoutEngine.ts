@@ -99,12 +99,28 @@ export class LayoutEngine implements ILayoutEngine {
     const padding = 50;
     const levelSpacing = 80; // Spacing between levels
 
-    // 1. Layout each cell's internal components to get dimensions
+    // 1. Get cell dimensions - use pre-calculated if available, otherwise calculate
     const cellResults = new Map<string, CellLayoutResult>();
     diagram.cells.forEach((cell) => {
-      const cellResult = this.layoutCell(cell.components, cell.internalConnections);
-      cellResults.set(cell.id, cellResult);
-      result.cellDimensions.set(cell.id, cellResult.dimensions);
+      // Use pre-calculated dimensions from converter if available
+      if (cell.dimensions) {
+        const dimensions = {
+          width: cell.dimensions.width,
+          height: cell.dimensions.height,
+          contentOffset: { x: 0, y: 0 },
+        };
+        cellResults.set(cell.id, {
+          nodePositions: new Map(),
+          dimensions,
+          bounds: { minX: 0, minY: 0, maxX: dimensions.width, maxY: dimensions.height },
+        });
+        result.cellDimensions.set(cell.id, dimensions);
+      } else {
+        // Calculate dimensions from components
+        const cellResult = this.layoutCell(cell.components, cell.internalConnections);
+        cellResults.set(cell.id, cellResult);
+        result.cellDimensions.set(cell.id, cellResult.dimensions);
+      }
     });
 
     // 2. Categorize externals into four zones:

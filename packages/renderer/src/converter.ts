@@ -447,9 +447,10 @@ function cellToNodes(
 
   // Create component nodes positioned inside cell with hierarchical dagre layout
   // This creates a cleaner flow-based arrangement that follows connection topology
+  // Use allInternalConnections which combines both legacy connections and flow definitions
   const componentPositions = layoutComponentsWithDagre(
     allComponents,
-    cell.connections,
+    allInternalConnections,
     !!cell.gateway,
     cellWidth,
     cellHeight
@@ -1210,6 +1211,10 @@ function toLayoutData(state: DiagramState): DiagramLayoutData {
               position: 'top' as const, // Default to top
             }
           : undefined,
+        // Pass pre-calculated dimensions from cellToNodes
+        dimensions: cellData.width && cellData.height
+          ? { width: cellData.width, height: cellData.height }
+          : undefined,
       });
     }
   }
@@ -1285,6 +1290,10 @@ export function applyLayoutWithEngine(
   // Apply positions to nodes
   // NOTE: Child nodes (components, gateways) keep their relative positions
   // calculated by cellToNodes - we only reposition top-level nodes
+  // IMPORTANT: We do NOT update cell dimensions from LayoutEngine because
+  // component positions were calculated based on the original cell dimensions
+  // in cellToNodes. Changing dimensions without adjusting component positions
+  // would break the layout.
   const layoutedNodes: DiagramNode[] = state.nodes.map((node) => {
     // Skip child nodes - they use relative positioning within their parent cell
     // The positions are already calculated correctly in cellToNodes
@@ -1294,22 +1303,8 @@ export function applyLayoutWithEngine(
 
     const position = result.nodes.get(node.id);
     if (position) {
-      // Update cell dimensions if applicable
-      if (node.type === 'cell') {
-        const cellDims = result.cellDimensions.get(node.id);
-        if (cellDims) {
-          const cellData = node.data as CellNodeData;
-          return {
-            ...node,
-            position: { x: position.x, y: position.y },
-            data: {
-              ...cellData,
-              width: cellDims.width,
-              height: cellDims.height,
-            },
-          };
-        }
-      }
+      // For cells, only update position - keep original dimensions from cellToNodes
+      // because component positions were calculated based on those dimensions
       return {
         ...node,
         position: { x: position.x, y: position.y },
