@@ -1,0 +1,349 @@
+/**
+ * Cell Diagrams Renderer Styles
+ */
+
+/* ============================================
+   Cell Diagram Container
+   ============================================ */
+
+.cell-diagram {
+  width: 100%;
+  height: 100%;
+  min-height: 400px;
+}
+
+.cell-diagram-error {
+  padding: 20px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  color: #dc2626;
+}
+
+.cell-diagram-error .error-title {
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+
+.cell-diagram-error .error-list {
+  margin: 0;
+  padding-left: 20px;
+  font-family: monospace;
+  font-size: 14px;
+}
+
+/* ============================================
+   Cell Node
+   ============================================ */
+
+.cell-node {
+  background: white;
+  border: 2px solid #4f46e5;
+  border-radius: 8px;
+  min-width: 250px;
+  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  overflow: hidden;
+}
+
+.cell-node.selected {
+  box-shadow: 0 0 0 2px #4f46e5, 0 4px 6px -1px rgb(0 0 0 / 0.1);
+}
+
+.cell-node-header {
+  padding: 8px 12px;
+  color: white;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.cell-node-title {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.cell-node-type {
+  font-size: 11px;
+  background: rgba(255, 255, 255, 0.2);
+  padding: 2px 6px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.cell-node-components {
+  padding: 8px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.cell-node-endpoints {
+  padding: 8px;
+  background: #f9fafb;
+}
+
+/* Component Item */
+.component-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  background: #f3f4f6;
+  border-radius: 4px;
+  margin-bottom: 4px;
+  font-size: 13px;
+}
+
+.component-item:last-child {
+  margin-bottom: 0;
+}
+
+.component-icon {
+  font-size: 14px;
+  width: 20px;
+  text-align: center;
+}
+
+.component-label {
+  flex: 1;
+  font-weight: 500;
+}
+
+.component-type-badge {
+  font-size: 10px;
+  color: #6b7280;
+  background: #e5e7eb;
+  padding: 2px 6px;
+  border-radius: 3px;
+  text-transform: uppercase;
+}
+
+/* Component Type Colors */
+.component-microservice { border-left: 3px solid #4f46e5; }
+.component-function { border-left: 3px solid #7c3aed; }
+.component-database { border-left: 3px solid #059669; }
+.component-gateway { border-left: 3px solid #0891b2; }
+.component-service { border-left: 3px solid #6366f1; }
+.component-broker { border-left: 3px solid #d97706; }
+.component-cache { border-left: 3px solid #dc2626; }
+.component-legacy { border-left: 3px solid #78716c; }
+.component-esb { border-left: 3px solid #0d9488; }
+.component-idp { border-left: 3px solid #be185d; }
+
+/* Endpoints */
+.cell-endpoint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+.cell-endpoint .endpoint-type {
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+.cell-endpoint-api .endpoint-type {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.cell-endpoint-event .endpoint-type {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.cell-endpoint-stream .endpoint-type {
+  background: #d1fae5;
+  color: #047857;
+}
+
+.cell-endpoint .endpoint-ref {
+  color: #6b7280;
+}
+
+/* Cell Handles */
+.cell-handle {
+  width: 12px !important;
+  height: 12px !important;
+  background: #4f46e5 !important;
+  border: 2px solid white !important;
+}
+
+/* ============================================
+   External Node
+   ============================================ */
+
+.external-node {
+  background: white;
+  border: 2px dashed #6b7280;
+  border-radius: 50%;
+  width: 100px;
+  height: 100px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 4px rgb(0 0 0 / 0.1);
+  padding: 10px;
+}
+
+.external-node.selected {
+  border-style: solid;
+  box-shadow: 0 0 0 2px #6b7280;
+}
+
+.external-node-icon {
+  width: 32px;
+  height: 32px;
+  color: #6b7280;
+}
+
+.external-node-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.external-node-label {
+  font-size: 12px;
+  font-weight: 500;
+  text-align: center;
+  margin-top: 4px;
+  color: #374151;
+}
+
+.external-node-type {
+  font-size: 10px;
+  color: #9ca3af;
+  text-transform: uppercase;
+  margin-top: 2px;
+}
+
+.external-handle {
+  width: 10px !important;
+  height: 10px !important;
+  background: #6b7280 !important;
+  border: 2px solid white !important;
+}
+
+/* ============================================
+   User Node
+   ============================================ */
+
+.user-node {
+  background: white;
+  border: 2px solid #7c3aed;
+  border-radius: 8px;
+  width: 80px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  box-shadow: 0 2px 4px rgb(0 0 0 / 0.1);
+}
+
+.user-node.selected {
+  box-shadow: 0 0 0 2px #7c3aed;
+}
+
+.user-node.internal {
+  border-color: #059669;
+}
+
+.user-node.internal.selected {
+  box-shadow: 0 0 0 2px #059669;
+}
+
+.user-node-icon {
+  width: 36px;
+  height: 36px;
+  color: #7c3aed;
+}
+
+.user-node.internal .user-node-icon {
+  color: #059669;
+}
+
+.user-node-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.user-node-label {
+  font-size: 12px;
+  font-weight: 500;
+  text-align: center;
+  margin-top: 4px;
+  color: #374151;
+}
+
+.user-handle {
+  width: 10px !important;
+  height: 10px !important;
+  background: #7c3aed !important;
+  border: 2px solid white !important;
+}
+
+.user-node.internal .user-handle {
+  background: #059669 !important;
+}
+
+/* ============================================
+   Connection Edge
+   ============================================ */
+
+.connection-edge {
+  stroke: #94a3b8;
+  stroke-width: 2;
+}
+
+.connection-edge.selected {
+  stroke: #4f46e5;
+  stroke-width: 3;
+}
+
+.connection-edge-label {
+  background: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  color: #374151;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.05);
+  white-space: nowrap;
+}
+
+/* ============================================
+   React Flow Overrides
+   ============================================ */
+
+.react-flow__minimap {
+  background: #f9fafb;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+}
+
+.react-flow__controls {
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 2px 4px rgb(0 0 0 / 0.1);
+}
+
+.react-flow__controls-button {
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.react-flow__controls-button:last-child {
+  border-bottom: none;
+}
+
+.react-flow__attribution {
+  background: transparent !important;
+}
+
+.react-flow__attribution a {
+  color: #9ca3af !important;
+}
