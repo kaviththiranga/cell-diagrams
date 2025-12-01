@@ -5,7 +5,8 @@
  * Based on the CellDL specification for Cell-Based Architecture.
  */
 
-import { CstParser } from 'chevrotain';
+import { CstParser, IParserConfig } from 'chevrotain';
+import { customErrorMessageProvider } from '../errors/messages';
 import {
   allTokens,
   // Top-level keywords
@@ -122,10 +123,12 @@ import {
 // ============================================
 
 export class CellDiagramsParser extends CstParser {
-  constructor() {
+  constructor(config?: Partial<IParserConfig>) {
     super(allTokens, {
       recoveryEnabled: true,
       maxLookahead: 4,
+      errorMessageProvider: customErrorMessageProvider,
+      ...config,
     });
     this.performSelfAnalysis();
   }

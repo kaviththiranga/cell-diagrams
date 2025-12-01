@@ -157,6 +157,8 @@ function stringifyCellDefinition(
 
   // Gateways (new multi-gateway syntax)
   for (const gw of cell.gateways) {
+    // Skip ErrorNodes
+    if (gw.type === 'ErrorNode') continue;
     lines.push('');
     lines.push(stringifyGateway(gw, opts, baseIndent + 1));
   }
@@ -169,6 +171,8 @@ function stringifyCellDefinition(
 
   // Components
   for (const comp of cell.components) {
+    // Skip ErrorNodes
+    if (comp.type === 'ErrorNode') continue;
     lines.push('');
     if (isClusterDefinition(comp)) {
       lines.push(stringifyCluster(comp, opts, baseIndent + 1));
@@ -179,12 +183,16 @@ function stringifyCellDefinition(
 
   // Internal flows
   for (const flow of cell.flows) {
+    // Skip ErrorNodes
+    if (flow.type === 'ErrorNode') continue;
     lines.push('');
     lines.push(stringifyFlowDefinition(flow, opts, baseIndent + 1));
   }
 
   // Nested cells
   for (const nestedCell of cell.nestedCells) {
+    // Skip ErrorNodes
+    if (nestedCell.type === 'ErrorNode') continue;
     lines.push('');
     lines.push(stringifyCellDefinition(nestedCell, opts, baseIndent + 1));
   }

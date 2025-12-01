@@ -33,6 +33,29 @@ export interface BaseNode {
 }
 
 // ============================================
+// Error Node (for partial AST with errors)
+// ============================================
+
+/**
+ * Represents a syntax error in the AST.
+ * Used when error recovery produces a partial AST.
+ * ErrorNodes can appear anywhere a statement or component could appear.
+ */
+export interface ErrorNode extends BaseNode {
+  type: 'ErrorNode';
+  /** Error code for programmatic handling */
+  errorCode: number;
+  /** Human-readable error message */
+  message: string;
+  /** Grammar rule where the error occurred */
+  ruleName?: string;
+  /** Hint for fixing the error */
+  recoveryHint?: string;
+  /** Partial data that was successfully parsed before the error */
+  partialData?: Record<string, unknown>;
+}
+
+// ============================================
 // Enumerated Types
 // ============================================
 
@@ -144,7 +167,8 @@ export type Statement =
   | ExternalDefinition
   | UserDefinition
   | ApplicationDefinition
-  | FlowDefinition;
+  | FlowDefinition
+  | ErrorNode;
 
 // ============================================
 // Cell Definition
@@ -166,13 +190,13 @@ export interface CellDefinition extends BaseNode {
   /** Primary gateway at cell boundary (control point) */
   gateway?: GatewayDefinition;
   /** All gateways (ingress/egress) at different positions */
-  gateways: GatewayDefinition[];
+  gateways: (GatewayDefinition | ErrorNode)[];
   /** Components inside the cell */
-  components: (ComponentDefinition | ClusterDefinition)[];
+  components: (ComponentDefinition | ClusterDefinition | ErrorNode)[];
   /** Flow definitions for internal and external traffic patterns */
-  flows: FlowDefinition[];
+  flows: (FlowDefinition | ErrorNode)[];
   /** Nested cells for composite architectures */
-  nestedCells: CellDefinition[];
+  nestedCells: (CellDefinition | ErrorNode)[];
 }
 
 // ============================================
@@ -388,9 +412,13 @@ export function isClusterDefinition(
 }
 
 export function isComponentDefinition(
-  node: ComponentDefinition | ClusterDefinition
+  node: ComponentDefinition | ClusterDefinition | ErrorNode
 ): node is ComponentDefinition {
   return node.type === 'ComponentDefinition';
+}
+
+export function isErrorNode(node: BaseNode): node is ErrorNode {
+  return node.type === 'ErrorNode';
 }
 
 // ============================================

@@ -7,9 +7,31 @@
 // AST Types
 export * from './ast/types';
 
-// Parser
+// Parser (standard)
 export { parse, parseOrThrow, validate } from './parser';
 export type { ParseResult, ParseError } from './parser';
+
+// Parser (with error recovery for IDEs)
+export { parseWithRecovery, validateWithRecovery } from './parser';
+export type { EnhancedParseError, EnhancedParseResult } from './parser';
+
+// Error handling system
+export {
+  ErrorCode,
+  ErrorCollector,
+  createErrorCollector,
+  getTokenDisplayName,
+  formatExpectedTokens,
+  findClosestMatch,
+  countErrorNodes,
+  extractErrorNodes,
+} from './errors';
+export type {
+  ErrorCodeType,
+  ErrorSeverity,
+  ErrorCategory,
+  SuggestedFix,
+} from './errors';
 
 // Stringify
 export { stringify } from './stringify';

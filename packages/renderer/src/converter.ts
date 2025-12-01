@@ -310,11 +310,19 @@ function cellToNodes(
   const cellWidth = cellSize;
   const cellHeight = cellSize;
 
+  // Filter out ErrorNodes from gateways and flows
+  const validGateways = cell.gateways.filter(
+    (gw): gw is GatewayDefinition => gw.type !== 'ErrorNode'
+  );
+  const validFlows = cell.flows.filter(
+    (flow): flow is FlowDefinition => flow.type !== 'ErrorNode'
+  );
+
   // Get primary gateway (first ingress gateway or legacy gateway)
-  const primaryGateway = cell.gateways.find(gw => gw.direction === 'ingress') ?? cell.gateway;
+  const primaryGateway = validGateways.find(gw => gw.direction === 'ingress') ?? cell.gateway;
 
   // Collect all internal connections from flow definitions
-  const allInternalConnections = cell.flows.flatMap((flow) => flow.flows.map((f) => ({
+  const allInternalConnections = validFlows.flatMap((flow) => flow.flows.map((f) => ({
     source: f.source,
     target: f.destination,
   })));
@@ -353,8 +361,8 @@ function cellToNodes(
   // Create gateway nodes - positioned ON the cell boundary
   // Gateways are NOT children of the cell so they can overlap the boundary
   // Support multiple gateways (ingress/egress) at different positions
-  const allGateways: GatewayDefinition[] = [...cell.gateways];
-  if (cell.gateway && !cell.gateways.some(gw => gw.id === cell.gateway!.id)) {
+  const allGateways: GatewayDefinition[] = [...validGateways];
+  if (cell.gateway && !validGateways.some(gw => gw.id === cell.gateway!.id)) {
     allGateways.push(cell.gateway);
   }
 
@@ -507,9 +515,12 @@ function cellToNodes(
     });
   }
 
-  // Process nested cells recursively
+  // Process nested cells recursively (filter out ErrorNodes)
+  const validNestedCells = cell.nestedCells.filter(
+    (nc): nc is CellDefinition => nc.type !== 'ErrorNode'
+  );
   let nestedCellIndex = 0;
-  for (const nestedCell of cell.nestedCells) {
+  for (const nestedCell of validNestedCells) {
     const nestedResult = cellToNodes(nestedCell, nestedCellIndex);
     // Add nested cell nodes with parent reference
     for (const nestedNode of nestedResult.nodes) {
