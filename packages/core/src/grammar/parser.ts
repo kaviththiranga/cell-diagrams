@@ -1056,7 +1056,7 @@ export class CellDiagramsParser extends CstParser {
   // ========================================
 
   /**
-   * UserDefinition = "user" (StringLiteral | Identifier) InlineUserType? "{" UserBody* "}"
+   * UserDefinition = "user" (StringLiteral | Identifier) InlineUserType? ("{" UserBody* "}")?
    */
   private userDefinition = this.RULE('userDefinition', () => {
     this.CONSUME(User);
@@ -1065,14 +1065,16 @@ export class CellDiagramsParser extends CstParser {
       { ALT: () => this.CONSUME(Identifier, { LABEL: 'userId' }) },
     ]);
     // Support inline type: user "Name" type:external { }
-    this.OPTION(() => {
+    this.OPTION1(() => {
       this.SUBRULE(this.inlineUserType);
     });
-    this.CONSUME(LBrace);
-    this.MANY(() => {
-      this.SUBRULE(this.userBody);
+    this.OPTION2(() => {
+      this.CONSUME(LBrace);
+      this.MANY(() => {
+        this.SUBRULE(this.userBody);
+      });
+      this.CONSUME(RBrace);
     });
-    this.CONSUME(RBrace);
   });
 
   /**
