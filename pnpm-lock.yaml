@@ -69,6 +69,9 @@ importers:
       '@cell-diagrams/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@cell-diagrams/language-server':
+        specifier: workspace:*
+        version: link:../../packages/language-server
       '@cell-diagrams/renderer':
         specifier: workspace:*
         version: link:../../packages/renderer
@@ -87,6 +90,12 @@ importers:
       react-resizable-panels:
         specifier: ^2.1.7
         version: 2.1.9(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      vscode-jsonrpc:
+        specifier: ^8.2.0
+        version: 8.2.0
+      vscode-languageserver-protocol:
+        specifier: ^3.17.5
+        version: 3.17.5
     devDependencies:
       '@types/react':
         specifier: ^18.3.18

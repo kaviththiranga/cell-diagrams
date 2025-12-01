@@ -10,3 +10,10 @@ export {
   registerCellDiagramsLanguage,
   defaultSampleCode,
 } from './cellDiagramsLanguage';
+
+export {
+  startLanguageClient,
+  stopLanguageClient,
+  isLanguageClientRunning,
+  notifyDocumentChange,
+} from './languageClient';

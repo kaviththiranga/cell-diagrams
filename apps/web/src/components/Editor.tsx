@@ -6,7 +6,7 @@
 import { useRef, useCallback, useEffect } from 'react';
 import MonacoEditor, { type OnMount, type OnChange } from '@monaco-editor/react';
 import type * as Monaco from 'monaco-editor';
-import { LANGUAGE_ID, registerCellDiagramsLanguage } from '../monaco';
+import { LANGUAGE_ID, registerCellDiagramsLanguage, startLanguageClient, stopLanguageClient } from '../monaco';
 import type { EnhancedParseError } from '@cell-diagrams/core';
 
 interface EditorProps {
@@ -56,8 +56,22 @@ export function Editor({ value, onChange, errors = [], onErrorClick }: EditorPro
     // Apply custom theme
     monaco.editor.setTheme('cell-diagrams-dark');
 
+    // Start the language client for LSP features
+    startLanguageClient(monaco).catch((error) => {
+      console.error('Failed to start language client:', error);
+    });
+
     // Focus editor
     editor.focus();
+  }, []);
+
+  // Cleanup language client on unmount
+  useEffect(() => {
+    return () => {
+      stopLanguageClient().catch((error) => {
+        console.error('Failed to stop language client:', error);
+      });
+    };
   }, []);
 
   const handleChange: OnChange = useCallback(
@@ -87,16 +101,19 @@ export function Editor({ value, onChange, errors = [], onErrorClick }: EditorPro
         message += `\n\n💡 Hint: ${error.recoveryHint}`;
       }
 
-      return {
+      const marker: Monaco.editor.IMarkerData = {
         severity: getSeverity(error.severity, monaco),
         message,
         startLineNumber: error.line,
         startColumn: error.column,
         endLineNumber: error.endLine,
         endColumn: error.endColumn,
-        code: error.code ? `E${error.code}` : undefined,
         source: 'CellDL',
       };
+      if (error.code) {
+        marker.code = `E${error.code}`;
+      }
+      return marker;
     });
 
     monaco.editor.setModelMarkers(model, 'cell-diagrams', markers);
@@ -112,7 +129,7 @@ export function Editor({ value, onChange, errors = [], onErrorClick }: EditorPro
       {
         provideCodeActions(
           actionModel,
-          range,
+          _range,
           context
         ): Monaco.languages.ProviderResult<Monaco.languages.CodeActionList> {
           const actions: Monaco.languages.CodeAction[] = [];
