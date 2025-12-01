@@ -634,6 +634,7 @@ function applicationToNode(app: ApplicationDefinition): DiagramNode {
 /**
  * Convert a FlowDefinition to React Flow edges.
  * Handles top-level flow blocks for inter-cell connections.
+ * Uses step (orthogonal) edges for cleaner routing between cells.
  */
 function flowDefinitionToEdges(flow: FlowDefinition): DiagramEdge[] {
   return flow.flows.map((flowConn: FlowConnection) => {
@@ -643,6 +644,7 @@ function flowDefinitionToEdges(flow: FlowDefinition): DiagramEdge[] {
       via: undefined,
       protocol: undefined,
       attributes: {},
+      edgeStyle: 'step', // Use step edges for inter-cell connections
     };
 
     return {

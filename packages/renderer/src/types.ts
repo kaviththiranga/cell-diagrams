@@ -109,6 +109,8 @@ export interface ConnectionEdgeData extends Record<string, unknown> {
   via?: string | undefined;
   protocol?: string | undefined;
   attributes: Record<string, AttributeValue>;
+  /** Edge rendering style: 'step' for orthogonal lines, 'bezier' for curves */
+  edgeStyle?: 'step' | 'bezier' | undefined;
 }
 
 // ============================================
