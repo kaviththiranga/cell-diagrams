@@ -170,7 +170,7 @@ export class CellDiagramsParser extends CstParser {
   });
 
   /**
-   * WorkspaceBody = VersionStatement | DescriptionStatement | PropertyStatement | Statement
+   * WorkspaceBody = VersionStatement | DescriptionStatement | PropertyStatement | Statement | FlowStatement
    */
   private workspaceBody = this.RULE('workspaceBody', () => {
     this.OR([
@@ -178,6 +178,8 @@ export class CellDiagramsParser extends CstParser {
       { ALT: () => this.SUBRULE(this.descriptionStatement) },
       { ALT: () => this.SUBRULE(this.propertyStatement) },
       { ALT: () => this.SUBRULE(this.statement) },
+      // Loose flow statements (without flow { } wrapper)
+      { ALT: () => this.SUBRULE(this.flowStatement, { LABEL: 'looseFlowStatement' }) },
     ]);
   });
 
@@ -287,6 +289,8 @@ export class CellDiagramsParser extends CstParser {
       { ALT: () => this.SUBRULE(this.legacyBlock) },
       { ALT: () => this.SUBRULE(this.clusterDefinition) },
       { ALT: () => this.SUBRULE(this.flowBlock) },
+      // Loose flow statements (without flow { } wrapper)
+      { ALT: () => this.SUBRULE(this.flowStatement, { LABEL: 'looseFlowStatement' }) },
       // Nested cells for composite architectures
       { ALT: () => this.SUBRULE(this.cellDefinition, { LABEL: 'nestedCell' }) },
     ]);

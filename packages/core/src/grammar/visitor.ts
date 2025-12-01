@@ -154,6 +154,7 @@ class CellDiagramsVisitor extends BaseCstVisitor {
     let description: string | undefined;
     const properties: PropertyDefinition[] = [];
     const statements: Statement[] = [];
+    const looseFlows: FlowConnection[] = [];
 
     if (ctx.workspaceBody) {
       for (const bodyNode of ctx.workspaceBody) {
@@ -176,9 +177,20 @@ class CellDiagramsVisitor extends BaseCstVisitor {
             case 'statement':
               statements.push(result.value as Statement);
               break;
+            case 'looseFlow':
+              looseFlows.push(...(result.value as FlowConnection[]));
+              break;
           }
         }
       }
+    }
+
+    // Collect loose flow statements into a single unnamed FlowDefinition
+    if (looseFlows.length > 0) {
+      statements.push({
+        type: 'FlowDefinition',
+        flows: looseFlows,
+      });
     }
 
     return {
@@ -196,6 +208,7 @@ class CellDiagramsVisitor extends BaseCstVisitor {
     descriptionStatement?: CstNode[];
     propertyStatement?: CstNode[];
     statement?: CstNode[];
+    looseFlowStatement?: CstNode[];
   }): { _type: string; value: unknown } | null {
     if (ctx.versionStatement?.[0]) {
       return { _type: 'version', value: this.visit(ctx.versionStatement[0]) };
@@ -208,6 +221,9 @@ class CellDiagramsVisitor extends BaseCstVisitor {
     }
     if (ctx.statement?.[0]) {
       return { _type: 'statement', value: this.visit(ctx.statement[0]) };
+    }
+    if (ctx.looseFlowStatement?.[0]) {
+      return { _type: 'looseFlow', value: this.visit(ctx.looseFlowStatement[0]) };
     }
     return null;
   }
@@ -287,6 +303,7 @@ class CellDiagramsVisitor extends BaseCstVisitor {
     const components: (ComponentDefinition | ClusterDefinition)[] = [];
     const flows: FlowDefinition[] = [];
     const nestedCells: CellDefinition[] = [];
+    const looseFlows: FlowConnection[] = [];
 
     // Handle inline type: cell "Name" type:logic { }
     if (ctx.inlineType?.[0]) {
@@ -328,12 +345,23 @@ class CellDiagramsVisitor extends BaseCstVisitor {
             case 'flow':
               flows.push(result.value as FlowDefinition);
               break;
+            case 'looseFlow':
+              looseFlows.push(...(result.value as FlowConnection[]));
+              break;
             case 'nestedCell':
               nestedCells.push(result.value as CellDefinition);
               break;
           }
         }
       }
+    }
+
+    // Collect loose flow statements into a single unnamed FlowDefinition
+    if (looseFlows.length > 0) {
+      flows.push({
+        type: 'FlowDefinition',
+        flows: looseFlows,
+      });
     }
 
     return {
@@ -364,6 +392,7 @@ class CellDiagramsVisitor extends BaseCstVisitor {
     legacyBlock?: CstNode[];
     clusterDefinition?: CstNode[];
     flowBlock?: CstNode[];
+    looseFlowStatement?: CstNode[];
     nestedCell?: CstNode[];
   }): { _type: string; value: unknown } | null {
     if (ctx.labelProperty?.[0]) {
@@ -401,6 +430,9 @@ class CellDiagramsVisitor extends BaseCstVisitor {
     }
     if (ctx.flowBlock?.[0]) {
       return { _type: 'flow', value: this.visit(ctx.flowBlock[0]) };
+    }
+    if (ctx.looseFlowStatement?.[0]) {
+      return { _type: 'looseFlow', value: this.visit(ctx.looseFlowStatement[0]) };
     }
     if (ctx.nestedCell?.[0]) {
       return { _type: 'nestedCell', value: this.visit(ctx.nestedCell[0]) };
