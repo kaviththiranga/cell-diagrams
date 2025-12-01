@@ -128,6 +128,11 @@
           ],
           "default": "TB",
           "description": "Default layout direction for diagrams"
+        },
+        "cellDiagrams.languageServer.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable the CellDL language server for advanced features (completions, hover, go-to-definition, etc.)"
         }
       }
     }
@@ -140,7 +145,9 @@
     "clean": "rm -rf dist *.vsix"
   },
   "dependencies": {
-    "@cell-diagrams/core": "workspace:*"
+    "@cell-diagrams/core": "workspace:*",
+    "@cell-diagrams/language-server": "workspace:*",
+    "vscode-languageclient": "^9.0.1"
   },
   "devDependencies": {
     "@types/vscode": "^1.85.0",
