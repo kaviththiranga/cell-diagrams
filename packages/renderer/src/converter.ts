@@ -18,6 +18,7 @@ import type {
   FlowDefinition,
   FlowConnection,
   GatewayDefinition,
+  ErrorNode as ASTErrorNode,
 } from '@cell-diagrams/core';
 import type {
   DiagramNode,
@@ -32,6 +33,7 @@ import type {
   GatewayNodeData,
   ConnectionEdgeData,
   LayoutOptions,
+  ErrorNodeData,
 } from './types';
 import { defaultLayoutOptions } from './types';
 import type { ComponentNodeData as ComponentNodeDataType } from './nodes/ComponentNode';
@@ -217,6 +219,7 @@ function layoutComponentsWithDagre(
 /**
  * Convert a Cell Diagrams AST to React Flow nodes and edges.
  * This creates individual nodes for cells, components, gateways, etc.
+ * Handles ErrorNodes from partial parsing for error visualization.
  */
 export function astToDiagram(ast: Program): DiagramState {
   const nodes: DiagramNode[] = [];
@@ -224,6 +227,7 @@ export function astToDiagram(ast: Program): DiagramState {
 
   // Track cell positions for layout
   let cellIndex = 0;
+  let errorIndex = 0;
 
   // Process all statements
   for (const stmt of ast.statements) {
@@ -247,10 +251,43 @@ export function astToDiagram(ast: Program): DiagramState {
       case 'FlowDefinition':
         edges.push(...flowDefinitionToEdges(stmt));
         break;
+      case 'ErrorNode': {
+        // Convert AST ErrorNode to diagram error node
+        nodes.push(errorNodeToDiagramNode(stmt, errorIndex));
+        errorIndex++;
+        break;
+      }
     }
   }
 
   return { nodes, edges };
+}
+
+/**
+ * Convert an AST ErrorNode to a diagram node for visualization.
+ */
+function errorNodeToDiagramNode(
+  errorNode: ASTErrorNode,
+  index: number
+): DiagramNode {
+  const data: ErrorNodeData = {
+    type: 'error',
+    errorCode: errorNode.errorCode,
+    message: errorNode.message,
+    ruleName: errorNode.ruleName,
+    recoveryHint: errorNode.recoveryHint,
+    severity: 'error', // Default to error severity
+    category: 'syntactic', // Default category
+    line: errorNode.location?.start.line,
+    column: errorNode.location?.start.column,
+  };
+
+  return {
+    id: `error-${index}`,
+    type: 'error',
+    position: { x: 0, y: 0 }, // Will be positioned by layout engine
+    data,
+  } as DiagramNode;
 }
 
 /**
@@ -327,6 +364,14 @@ function cellToNodes(
     target: f.destination,
   })));
 
+  // Count errors within this cell
+  const gatewayErrorCount = cell.gateways.filter(gw => gw.type === 'ErrorNode').length;
+  const componentErrorCount = cell.components.filter(c => c.type === 'ErrorNode').length;
+  const flowErrorCount = cell.flows.filter(f => f.type === 'ErrorNode').length;
+  const nestedCellErrorCount = cell.nestedCells.filter(nc => nc.type === 'ErrorNode').length;
+  const totalErrorCount = gatewayErrorCount + componentErrorCount + flowErrorCount + nestedCellErrorCount;
+  const hasErrors = totalErrorCount > 0;
+
   // Create cell boundary node
   const cellData: CellNodeData = {
     type: 'cell',
@@ -347,6 +392,8 @@ function cellToNodes(
     internalConnections: allInternalConnections,
     width: cellWidth,
     height: cellHeight,
+    errorCount: totalErrorCount,
+    hasErrors,
   };
 
   nodes.push({

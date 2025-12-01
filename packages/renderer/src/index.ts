@@ -2,13 +2,19 @@
  * @cell-diagrams/renderer
  *
  * React Flow renderer for Cell Diagrams.
+ * Supports error recovery and partial diagram rendering.
  */
 
-// Main component
-export { CellDiagram } from './components';
+// Main components
+export { CellDiagram, ErrorPanel } from './components';
+export type { ErrorPanelProps } from './components';
 
 // Hooks
-export { useCellDiagram } from './hooks';
+export {
+  useCellDiagram,
+  getSeverityColor,
+  getCategoryDisplayName,
+} from './hooks';
 export type { UseCellDiagramOptions, UseCellDiagramResult } from './hooks';
 
 // Custom nodes
@@ -19,6 +25,7 @@ export {
   ApplicationNode,
   ComponentNode,
   GatewayNode,
+  ErrorNode,
   nodeTypes,
 } from './nodes';
 
@@ -40,6 +47,7 @@ export type {
   ComponentNodeData,
   ClusterNodeData,
   GatewayNodeData,
+  ErrorNodeData,
   DiagramNodeData,
   ConnectionEdgeData,
   DiagramNode,
@@ -47,6 +55,9 @@ export type {
   DiagramState,
   LayoutOptions,
   CellDiagramProps,
+  EnhancedParseError,
+  ErrorCategory,
+  ErrorSeverity,
 } from './types';
 
 export {

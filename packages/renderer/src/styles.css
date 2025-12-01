@@ -416,3 +416,625 @@
   color: #374151;
   border-radius: 3px;
 }
+
+/* ============================================
+   Error Severity Styles
+   ============================================ */
+
+.cell-diagram-error--error {
+  border-color: #dc2626;
+  background: #fef2f2;
+}
+
+.cell-diagram-error--warning {
+  border-color: #f59e0b;
+  background: #fffbeb;
+}
+
+.cell-diagram-error--info {
+  border-color: #3b82f6;
+  background: #eff6ff;
+}
+
+/* ============================================
+   Cell Diagram Container with Errors
+   ============================================ */
+
+.cell-diagram-container {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  position: relative;
+}
+
+.cell-diagram-container--with-errors.cell-diagram-container--errors-bottom {
+  flex-direction: column;
+}
+
+.cell-diagram-container--with-errors.cell-diagram-container--errors-right {
+  flex-direction: row;
+}
+
+.cell-diagram-container--errors-bottom .cell-diagram {
+  flex: 1;
+  min-height: 0;
+}
+
+.cell-diagram-container--errors-right .cell-diagram {
+  flex: 1;
+  min-width: 0;
+}
+
+.cell-diagram-error-only {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+/* ============================================
+   Partial Diagram Indicator
+   ============================================ */
+
+.cell-diagram--partial {
+  position: relative;
+}
+
+.cell-diagram-partial-indicator {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #fef3c7;
+  color: #92400e;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  border: 1px solid #fcd34d;
+}
+
+.cell-diagram-partial-indicator .partial-icon {
+  font-size: 14px;
+}
+
+/* ============================================
+   Enhanced Error Display
+   ============================================ */
+
+.cell-diagram-error .error-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  margin-bottom: 12px;
+  font-size: 16px;
+}
+
+.cell-diagram-error .error-title-icon {
+  font-size: 18px;
+}
+
+.cell-diagram-error .error-count-badge {
+  background: #dc2626;
+  color: white;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.cell-diagram-error .error-summary {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 12px;
+  font-size: 13px;
+}
+
+.error-summary-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.error-summary-item--error {
+  color: #dc2626;
+}
+
+.error-summary-item--warning {
+  color: #f59e0b;
+}
+
+.cell-diagram-error .error-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.error-list-item {
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  background: white;
+  border-radius: 6px;
+  border-left: 3px solid #dc2626;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.error-list-item:hover {
+  background: #f9fafb;
+  transform: translateX(2px);
+}
+
+.error-list-item--error {
+  border-left-color: #dc2626;
+}
+
+.error-list-item--warning {
+  border-left-color: #f59e0b;
+}
+
+.error-list-item--info {
+  border-left-color: #3b82f6;
+}
+
+.error-list-location {
+  font-family: monospace;
+  font-size: 11px;
+  color: #6b7280;
+  margin-right: 8px;
+}
+
+.error-list-message {
+  font-size: 13px;
+  color: #1f2937;
+}
+
+.error-list-hint {
+  display: block;
+  margin-top: 6px;
+  font-size: 12px;
+  color: #059669;
+}
+
+.error-list-hint .hint-icon {
+  margin-right: 4px;
+}
+
+.error-more {
+  text-align: center;
+  font-size: 12px;
+  color: #6b7280;
+  margin-top: 8px;
+  font-style: italic;
+}
+
+/* ============================================
+   Error Panel Component
+   ============================================ */
+
+.error-panel {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  font-size: 13px;
+}
+
+.error-panel--bottom {
+  border-top: 1px solid #e5e7eb;
+  max-height: 250px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.error-panel--right {
+  border-left: 1px solid #e5e7eb;
+  width: 350px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.error-panel--overlay {
+  position: absolute;
+  bottom: 20px;
+  right: 20px;
+  width: 400px;
+  max-height: 300px;
+  border-radius: 8px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+}
+
+.error-panel-header {
+  display: flex;
+  align-items: center;
+  padding: 10px 12px;
+  background: #f9fafb;
+  border-bottom: 1px solid #e5e7eb;
+  gap: 8px;
+}
+
+.error-panel-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  color: #1f2937;
+  flex: 1;
+}
+
+.error-panel-title-icon {
+  font-size: 14px;
+}
+
+.error-panel-total-count {
+  background: #6b7280;
+  color: white;
+  padding: 1px 6px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.error-panel-counts {
+  display: flex;
+  gap: 8px;
+}
+
+.error-panel-count {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.error-panel-count--error {
+  color: #dc2626;
+}
+
+.error-panel-count--warning {
+  color: #f59e0b;
+}
+
+.error-panel-count--info {
+  color: #3b82f6;
+}
+
+.error-panel-toggle {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 16px;
+  color: #6b7280;
+  padding: 4px;
+  border-radius: 4px;
+  transition: all 0.15s ease;
+}
+
+.error-panel-toggle:hover {
+  background: #e5e7eb;
+  color: #1f2937;
+}
+
+.error-panel-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+/* Category Groups */
+.error-panel-category {
+  margin-bottom: 8px;
+}
+
+.error-panel-category-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 8px;
+  background: #f3f4f6;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  color: #374151;
+  transition: background 0.15s ease;
+}
+
+.error-panel-category-header:hover {
+  background: #e5e7eb;
+}
+
+.error-panel-category-chevron {
+  transition: transform 0.15s ease;
+  font-size: 10px;
+}
+
+.error-panel-category-chevron.expanded {
+  transform: rotate(90deg);
+}
+
+.error-panel-category-name {
+  flex: 1;
+  text-align: left;
+}
+
+.error-panel-category-count {
+  background: #9ca3af;
+  color: white;
+  padding: 1px 5px;
+  border-radius: 6px;
+  font-size: 10px;
+}
+
+.error-panel-category-items {
+  padding: 4px 0 4px 16px;
+}
+
+/* Error Items */
+.error-panel-item {
+  padding: 8px 10px;
+  margin-bottom: 4px;
+  background: #fafafa;
+  border-radius: 4px;
+  border-left: 3px solid #dc2626;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.error-panel-item:hover {
+  background: #f3f4f6;
+}
+
+.error-panel-item--error {
+  border-left-color: #dc2626;
+}
+
+.error-panel-item--warning {
+  border-left-color: #f59e0b;
+}
+
+.error-panel-item--info {
+  border-left-color: #3b82f6;
+}
+
+.error-panel-item-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.error-panel-item-icon {
+  font-size: 12px;
+}
+
+.error-panel-item-location {
+  font-family: monospace;
+  font-size: 11px;
+  color: #6b7280;
+}
+
+.error-panel-item-code {
+  font-family: monospace;
+  font-size: 10px;
+  color: #9ca3af;
+  background: #e5e7eb;
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+.error-panel-item-message {
+  font-size: 12px;
+  color: #1f2937;
+  line-height: 1.4;
+}
+
+.error-panel-item-hint {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  margin-top: 6px;
+  font-size: 11px;
+  color: #059669;
+  background: #ecfdf5;
+  padding: 4px 6px;
+  border-radius: 3px;
+}
+
+.error-panel-hint-icon {
+  flex-shrink: 0;
+}
+
+.error-panel-item-fix-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+  padding: 4px 8px;
+  background: #dbeafe;
+  color: #1d4ed8;
+  border: 1px solid #93c5fd;
+  border-radius: 4px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.error-panel-item-fix-btn:hover {
+  background: #bfdbfe;
+}
+
+.error-panel-item-fix-btn .fix-icon {
+  font-size: 12px;
+}
+
+.error-panel-item-expected {
+  margin-top: 4px;
+  font-size: 10px;
+  color: #6b7280;
+  font-style: italic;
+}
+
+/* ============================================
+   Error Node (in diagram)
+   ============================================ */
+
+.error-node {
+  background: white;
+  border: 2px dashed #dc2626;
+  border-radius: 8px;
+  padding: 12px;
+  min-width: 150px;
+  max-width: 250px;
+  box-shadow: 0 2px 8px rgba(220, 38, 38, 0.15);
+  transition: all 0.2s ease;
+}
+
+.error-node:hover {
+  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.25);
+  transform: translateY(-1px);
+}
+
+.error-node.selected {
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.3);
+}
+
+.error-node--error {
+  border-color: #dc2626;
+}
+
+.error-node--warning {
+  border-color: #f59e0b;
+  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.15);
+}
+
+.error-node--info {
+  border-color: #3b82f6;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.15);
+}
+
+.error-node-icon {
+  font-size: 20px;
+  text-align: center;
+  margin-bottom: 6px;
+}
+
+.error-node-icon--error {
+  color: #dc2626;
+}
+
+.error-node-icon--warning {
+  color: #f59e0b;
+}
+
+.error-node-icon--info {
+  color: #3b82f6;
+}
+
+.error-node-content {
+  text-align: center;
+}
+
+.error-node-category {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 3px;
+  margin-bottom: 6px;
+}
+
+.error-node-category--lexical {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.error-node-category--syntactic {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.error-node-category--structural {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.error-node-category--semantic {
+  background: #f3e8ff;
+  color: #6b21a8;
+}
+
+.error-node-message {
+  font-size: 11px;
+  color: #374151;
+  line-height: 1.4;
+  margin-bottom: 4px;
+}
+
+.error-node-location {
+  font-size: 10px;
+  font-family: monospace;
+  color: #6b7280;
+  margin-bottom: 4px;
+}
+
+.error-node-hint {
+  font-size: 10px;
+  color: #059669;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px dashed #d1d5db;
+}
+
+.error-node-hint-icon {
+  margin-right: 2px;
+}
+
+.error-node-rule {
+  font-size: 9px;
+  color: #9ca3af;
+  font-style: italic;
+  margin-top: 4px;
+}
+
+.error-node-handle {
+  width: 8px !important;
+  height: 8px !important;
+  background: #dc2626 !important;
+  border: none !important;
+}
+
+/* ============================================
+   Cell Node Error Badge
+   ============================================ */
+
+.cell-error-badge {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  background: #dc2626;
+  color: white;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 10px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  z-index: 10;
+}
+
+.cell-boundary-node.has-errors .cell-boundary-path {
+  stroke: #dc2626;
+  stroke-dasharray: 8 4;
+}

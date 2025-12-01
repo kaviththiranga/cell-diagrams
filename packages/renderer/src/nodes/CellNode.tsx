@@ -58,15 +58,28 @@ function CellNodeComponent({ data, selected }: NodeProps<CellNodeType>) {
 
   const width = cellData.width ?? 400;
   const height = cellData.height ?? 300;
+  const hasErrors = cellData.hasErrors ?? false;
+  const errorCount = cellData.errorCount ?? 0;
 
   // Generate regular octagon path with equal sides
   const octagonPath = generateRegularOctagonPath(width, height);
 
+  // Determine stroke color based on error state
+  const strokeColor = hasErrors ? '#dc2626' : '#868e96';
+  const strokeDasharray = hasErrors ? '8 4' : 'none';
+
   return (
     <div
-      className={`cell-boundary-node ${selected ? 'selected' : ''}`}
+      className={`cell-boundary-node ${selected ? 'selected' : ''} ${hasErrors ? 'has-errors' : ''}`}
       style={{ width, height }}
     >
+      {/* Error badge */}
+      {hasErrors && errorCount > 0 && (
+        <div className="cell-error-badge">
+          {errorCount} error{errorCount !== 1 ? 's' : ''}
+        </div>
+      )}
+
       {/* Connection handles for all four directions */}
       <Handle
         type="target"
@@ -103,8 +116,9 @@ function CellNodeComponent({ data, selected }: NodeProps<CellNodeType>) {
         <path
           d={octagonPath}
           fill="none"
-          stroke="#868e96"
+          stroke={strokeColor}
           strokeWidth="2"
+          strokeDasharray={strokeDasharray}
           className="cell-boundary-path"
         />
       </svg>

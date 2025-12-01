@@ -14,8 +14,31 @@ import type {
   ExternalType,
   UserType,
   AttributeValue,
+  EnhancedParseError,
+  ErrorCategory,
+  ErrorSeverity,
 } from '@cell-diagrams/core';
 import type { LayoutEngineOptions } from './layout';
+
+// ============================================
+// Error Types for Renderer
+// ============================================
+
+/** Re-export error types from core */
+export type { EnhancedParseError, ErrorCategory, ErrorSeverity } from '@cell-diagrams/core';
+
+/** Data for an ErrorNode in the diagram */
+export interface ErrorNodeData extends Record<string, unknown> {
+  type: 'error';
+  errorCode: number;
+  message: string;
+  ruleName?: string | undefined;
+  recoveryHint?: string | undefined;
+  severity: ErrorSeverity;
+  category: ErrorCategory;
+  line?: number | undefined;
+  column?: number | undefined;
+}
 
 // ============================================
 // Node Data Types
@@ -58,9 +81,13 @@ export interface CellNodeData extends Record<string, unknown> {
   clusters: ClusterNodeData[];
   internalConnections: Array<{ source: string; target: string }>;
   /** Width of the cell boundary (for minimalist rendering) */
-  width?: number;
+  width?: number | undefined;
   /** Height of the cell boundary (for minimalist rendering) */
-  height?: number;
+  height?: number | undefined;
+  /** Number of ErrorNodes within this cell */
+  errorCount?: number | undefined;
+  /** Whether this cell has parse errors */
+  hasErrors?: boolean | undefined;
 }
 
 /** Data for an External system node */
@@ -96,7 +123,8 @@ export type DiagramNodeData =
   | CellNodeData
   | ExternalNodeData
   | UserNodeData
-  | ApplicationNodeData;
+  | ApplicationNodeData
+  | ErrorNodeData;
 
 // ============================================
 // Edge Data Types
@@ -121,6 +149,7 @@ export type CellNode = Node<CellNodeData, 'cell'>;
 export type ExternalNode = Node<ExternalNodeData, 'external'>;
 export type UserNode = Node<UserNodeData, 'user'>;
 export type ApplicationNode = Node<ApplicationNodeData, 'application'>;
+export type ErrorDiagramNode = Node<ErrorNodeData, 'error'>;
 
 // Import component and gateway node data types
 import type { ComponentNodeData as CompNodeData } from './nodes/ComponentNode';
@@ -129,7 +158,7 @@ import type { GatewayNodeData as GwNodeData } from './nodes/GatewayNode';
 export type ComponentNode = Node<CompNodeData, 'component'>;
 export type GatewayNode = Node<GwNodeData, 'gateway'>;
 
-export type DiagramNode = CellNode | ExternalNode | UserNode | ApplicationNode | ComponentNode | GatewayNode;
+export type DiagramNode = CellNode | ExternalNode | UserNode | ApplicationNode | ComponentNode | GatewayNode | ErrorDiagramNode;
 export type DiagramEdge = Edge<ConnectionEdgeData>;
 
 // ============================================
@@ -169,17 +198,25 @@ export const defaultLayoutOptions: Required<LayoutOptions> = {
 
 export interface CellDiagramProps {
   /** The source code to render */
-  source?: string;
+  source?: string | undefined;
   /** Layout options for the new LayoutEngine */
-  layoutOptions?: Partial<LayoutEngineOptions>;
+  layoutOptions?: Partial<LayoutEngineOptions> | undefined;
   /** Callback when a node is clicked */
-  onNodeClick?: (nodeId: string, nodeData: DiagramNodeData) => void;
+  onNodeClick?: ((nodeId: string, nodeData: DiagramNodeData) => void) | undefined;
   /** Callback when an edge is clicked */
-  onEdgeClick?: (edgeId: string, edgeData: ConnectionEdgeData) => void;
+  onEdgeClick?: ((edgeId: string, edgeData: ConnectionEdgeData) => void) | undefined;
   /** Whether to fit the view on load */
-  fitView?: boolean;
+  fitView?: boolean | undefined;
   /** Additional class name */
-  className?: string;
+  className?: string | undefined;
+  /** Whether to show partial diagram even with errors */
+  showPartialOnError?: boolean | undefined;
+  /** Callback when an error is clicked in the error panel */
+  onErrorClick?: ((error: EnhancedParseError) => void) | undefined;
+  /** Whether to show the error panel */
+  showErrorPanel?: boolean | undefined;
+  /** Position of the error panel */
+  errorPanelPosition?: 'bottom' | 'right' | 'overlay' | undefined;
 }
 
 // ============================================

@@ -2,5 +2,9 @@
  * Custom Hooks
  */
 
-export { useCellDiagram } from './useCellDiagram';
+export {
+  useCellDiagram,
+  getSeverityColor,
+  getCategoryDisplayName,
+} from './useCellDiagram';
 export type { UseCellDiagramOptions, UseCellDiagramResult } from './useCellDiagram';

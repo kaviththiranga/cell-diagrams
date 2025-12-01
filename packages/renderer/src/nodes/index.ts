@@ -8,6 +8,7 @@ export { UserNode } from './UserNode';
 export { ApplicationNode } from './ApplicationNode';
 export { ComponentNode } from './ComponentNode';
 export { GatewayNode } from './GatewayNode';
+export { ErrorNode } from './ErrorNode';
 
 // Export icons
 export * from './icons';
@@ -18,6 +19,7 @@ import { UserNode } from './UserNode';
 import { ApplicationNode } from './ApplicationNode';
 import { ComponentNode } from './ComponentNode';
 import { GatewayNode } from './GatewayNode';
+import { ErrorNode } from './ErrorNode';
 
 export const nodeTypes = {
   cell: CellNode,
@@ -26,4 +28,5 @@ export const nodeTypes = {
   application: ApplicationNode,
   component: ComponentNode,
   gateway: GatewayNode,
+  error: ErrorNode,
 } as const;
