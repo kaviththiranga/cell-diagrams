@@ -555,8 +555,8 @@ export class CellDiagramsParser extends CstParser {
   });
 
   /**
-   * ComponentBlock = "component" (StringLiteral | Identifier) "{" ComponentProperty* "}"
-   * CellDL style component with block properties
+   * ComponentBlock = "component" (StringLiteral | Identifier) ("{" ComponentProperty* "}")?
+   * CellDL style component with optional block properties
    */
   private componentBlock = this.RULE('componentBlock', () => {
     this.CONSUME(Component);
@@ -564,15 +564,17 @@ export class CellDiagramsParser extends CstParser {
       { ALT: () => this.CONSUME(StringLiteral, { LABEL: 'componentId' }) },
       { ALT: () => this.CONSUME(Identifier, { LABEL: 'componentId' }) },
     ]);
-    this.CONSUME(LBrace);
-    this.MANY(() => {
-      this.SUBRULE(this.componentProperty);
+    this.OPTION(() => {
+      this.CONSUME(LBrace);
+      this.MANY(() => {
+        this.SUBRULE(this.componentProperty);
+      });
+      this.CONSUME(RBrace);
     });
-    this.CONSUME(RBrace);
   });
 
   /**
-   * DatabaseBlock = "database" (StringLiteral | Identifier) "{" DatabaseProperty* "}"
+   * DatabaseBlock = "database" (StringLiteral | Identifier) ("{" DatabaseProperty* "}")?
    */
   private databaseBlock = this.RULE('databaseBlock', () => {
     this.CONSUME(Database);
@@ -580,15 +582,17 @@ export class CellDiagramsParser extends CstParser {
       { ALT: () => this.CONSUME(StringLiteral, { LABEL: 'databaseId' }) },
       { ALT: () => this.CONSUME(Identifier, { LABEL: 'databaseId' }) },
     ]);
-    this.CONSUME(LBrace);
-    this.MANY(() => {
-      this.SUBRULE(this.databaseProperty);
+    this.OPTION(() => {
+      this.CONSUME(LBrace);
+      this.MANY(() => {
+        this.SUBRULE(this.databaseProperty);
+      });
+      this.CONSUME(RBrace);
     });
-    this.CONSUME(RBrace);
   });
 
   /**
-   * FunctionBlock = "function" (StringLiteral | Identifier) "{" ComponentProperty* "}"
+   * FunctionBlock = "function" (StringLiteral | Identifier) ("{" ComponentProperty* "}")?
    */
   private functionBlock = this.RULE('functionBlock', () => {
     this.CONSUME(Function);
@@ -596,15 +600,17 @@ export class CellDiagramsParser extends CstParser {
       { ALT: () => this.CONSUME(StringLiteral, { LABEL: 'functionId' }) },
       { ALT: () => this.CONSUME(Identifier, { LABEL: 'functionId' }) },
     ]);
-    this.CONSUME(LBrace);
-    this.MANY(() => {
-      this.SUBRULE(this.componentProperty);
+    this.OPTION(() => {
+      this.CONSUME(LBrace);
+      this.MANY(() => {
+        this.SUBRULE(this.componentProperty);
+      });
+      this.CONSUME(RBrace);
     });
-    this.CONSUME(RBrace);
   });
 
   /**
-   * LegacyBlock = "legacy" (StringLiteral | Identifier) "{" ComponentProperty* "}"
+   * LegacyBlock = "legacy" (StringLiteral | Identifier) ("{" ComponentProperty* "}")?
    */
   private legacyBlock = this.RULE('legacyBlock', () => {
     this.CONSUME(LegacyType);
@@ -612,11 +618,13 @@ export class CellDiagramsParser extends CstParser {
       { ALT: () => this.CONSUME(StringLiteral, { LABEL: 'legacyId' }) },
       { ALT: () => this.CONSUME(Identifier, { LABEL: 'legacyId' }) },
     ]);
-    this.CONSUME(LBrace);
-    this.MANY(() => {
-      this.SUBRULE(this.componentProperty);
+    this.OPTION(() => {
+      this.CONSUME(LBrace);
+      this.MANY(() => {
+        this.SUBRULE(this.componentProperty);
+      });
+      this.CONSUME(RBrace);
     });
-    this.CONSUME(RBrace);
   });
 
   /**
@@ -945,18 +953,23 @@ export class CellDiagramsParser extends CstParser {
   });
 
   /**
-   * Reference = Identifier ("." Identifier)?
+   * Reference = (Identifier | StringLiteral) ("." (Identifier | StringLiteral))?
    * Supports both simple (Component) and qualified (Cell.Component) references
+   * Allows quoted identifiers for names with spaces: "Order Service" -> "Payment Service"
    */
   private reference = this.RULE('reference', () => {
-    // Allow keywords like "user" as first part of reference
+    // Allow keywords like "user", identifiers, or quoted strings as first part of reference
     this.OR1([
       { ALT: () => this.CONSUME1(Identifier, { LABEL: 'refEntity' }) },
       { ALT: () => this.CONSUME(User, { LABEL: 'refEntity' }) },
+      { ALT: () => this.CONSUME(StringLiteral, { LABEL: 'refEntity' }) },
     ]);
     this.OPTION(() => {
       this.CONSUME(Dot);
-      this.CONSUME2(Identifier, { LABEL: 'refComponent' });
+      this.OR2([
+        { ALT: () => this.CONSUME2(Identifier, { LABEL: 'refComponent' }) },
+        { ALT: () => this.CONSUME2(StringLiteral, { LABEL: 'refComponent' }) },
+      ]);
     });
   });
 

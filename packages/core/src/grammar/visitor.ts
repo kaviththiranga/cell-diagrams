@@ -652,7 +652,7 @@ class CellDiagramsVisitor extends BaseCstVisitor {
     attributeBlock?: CstNode[];
   }): ComponentDefinition {
     const componentType = this.visit(ctx.componentType[0]!) as ComponentType;
-    const id = extractStringValue(ctx.componentId[0]!);
+    const id = extractStringValue(ctx.componentId[0]!).replace(/\s+/g, '');  // Normalize to match flow references
     const attributes: Record<string, AttributeValue> = {};
     let sidecars: string[] | undefined;
 
@@ -681,7 +681,7 @@ class CellDiagramsVisitor extends BaseCstVisitor {
     componentId: IToken[];
     componentProperty?: CstNode[];
   }): ComponentDefinition {
-    const id = extractStringValue(ctx.componentId[0]!);
+    const id = extractStringValue(ctx.componentId[0]!).replace(/\s+/g, '');  // Normalize to match flow references
     let source: string | undefined;
     let port: number | undefined;
     const env: EnvVar[] = [];
@@ -725,7 +725,7 @@ class CellDiagramsVisitor extends BaseCstVisitor {
     databaseId: IToken[];
     databaseProperty?: CstNode[];
   }): ComponentDefinition {
-    const id = extractStringValue(ctx.databaseId[0]!);
+    const id = extractStringValue(ctx.databaseId[0]!).replace(/\s+/g, '');  // Normalize to match flow references
     let engine: string | undefined;
     let storage: string | undefined;
     let version: string | undefined;
@@ -770,7 +770,7 @@ class CellDiagramsVisitor extends BaseCstVisitor {
     functionId: IToken[];
     componentProperty?: CstNode[];
   }): ComponentDefinition {
-    const id = extractStringValue(ctx.functionId[0]!);
+    const id = extractStringValue(ctx.functionId[0]!).replace(/\s+/g, '');  // Normalize to match flow references
     let source: string | undefined;
     let port: number | undefined;
     const env: EnvVar[] = [];
@@ -814,7 +814,7 @@ class CellDiagramsVisitor extends BaseCstVisitor {
     legacyId: IToken[];
     componentProperty?: CstNode[];
   }): ComponentDefinition {
-    const id = extractStringValue(ctx.legacyId[0]!);
+    const id = extractStringValue(ctx.legacyId[0]!).replace(/\s+/g, '');  // Normalize to match flow references
     const attributes: Record<string, AttributeValue> = {};
 
     if (ctx.componentProperty) {
@@ -1079,8 +1079,18 @@ class CellDiagramsVisitor extends BaseCstVisitor {
     refEntity: IToken[];
     refComponent?: IToken[];
   }): string {
-    const entity = ctx.refEntity[0]!.image;
-    const component = ctx.refComponent?.[0]?.image;
+    const entityToken = ctx.refEntity[0]!;
+    const entity = entityToken.tokenType.name === 'StringLiteral'
+      ? extractStringValue(entityToken).replace(/\s+/g, '')  // Normalize to match cell ID creation
+      : entityToken.image;
+
+    const componentToken = ctx.refComponent?.[0];
+    const component = componentToken
+      ? (componentToken.tokenType.name === 'StringLiteral'
+          ? extractStringValue(componentToken)
+          : componentToken.image)
+      : undefined;
+
     return component ? `${entity}.${component}` : entity;
   }
 
