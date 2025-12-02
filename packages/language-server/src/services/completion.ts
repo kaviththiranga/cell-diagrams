@@ -23,6 +23,7 @@ type CompletionContext =
   | 'gateway-body'
   | 'component-body'
   | 'flow-body'
+  | 'flow-source'
   | 'type-value'
   | 'cell-type-value'
   | 'component-type-value'
@@ -32,6 +33,7 @@ type CompletionContext =
   | 'user-type-value'
   | 'auth-value'
   | 'flow-reference'
+  | 'workspace-body'
   | 'unknown';
 
 /**
@@ -42,19 +44,25 @@ export function getCompletions(
   position: Position,
   state: DocumentState
 ): CompletionItem[] {
-  const context = determineContext(document, position);
+  const { context, currentCell } = determineContext(document, position);
 
   switch (context) {
     case 'top-level':
       return getTopLevelCompletions();
     case 'cell-body':
-      return getCellBodyCompletions();
+      return [...getCellBodyCompletions(), ...getScopedFlowCompletions(state, currentCell)];
     case 'gateway-body':
       return getGatewayBodyCompletions();
     case 'component-body':
       return getComponentBodyCompletions();
     case 'flow-body':
-      return getFlowCompletions(state);
+      return getScopedFlowCompletions(state, currentCell);
+    case 'flow-source':
+      return getScopedFlowCompletions(state, currentCell);
+    case 'flow-reference':
+      return getScopedFlowCompletions(state, currentCell);
+    case 'workspace-body':
+      return [...getTopLevelCompletions(), ...getScopedFlowCompletions(state, undefined)];
     case 'cell-type-value':
       return getCellTypeCompletions();
     case 'component-type-value':
@@ -69,76 +77,133 @@ export function getCompletions(
       return getUserTypeCompletions();
     case 'auth-value':
       return getAuthCompletions();
-    case 'flow-reference':
-      return getFlowReferenceCompletions(state);
     default:
       return getAllCompletions(state);
   }
 }
 
 /**
+ * Result of context determination
+ */
+interface ContextResult {
+  context: CompletionContext;
+  currentCell: string | undefined;
+}
+
+/**
  * Determine completion context from cursor position
  */
-function determineContext(document: TextDocument, position: Position): CompletionContext {
+function determineContext(document: TextDocument, position: Position): ContextResult {
   const line = getLineText(document, position.line);
   const textBeforeCursor = line.slice(0, position.character);
   const fullText = document.getText();
   const offset = document.offsetAt(position);
   const textBefore = fullText.slice(0, offset);
 
+  // Extract current cell name if inside a cell
+  const currentCell = getCurrentCellName(textBefore);
+
   // Check for specific patterns
   if (/type\s*:\s*$/.test(textBeforeCursor)) {
     // Determine if we're in a cell or component context
     if (isInsideBlock(textBefore, 'cell')) {
-      return 'cell-type-value';
+      return { context: 'cell-type-value', currentCell };
     }
     if (isInsideBlock(textBefore, 'external')) {
-      return 'external-type-value';
+      return { context: 'external-type-value', currentCell };
     }
     if (isInsideBlock(textBefore, 'user')) {
-      return 'user-type-value';
+      return { context: 'user-type-value', currentCell };
     }
-    return 'component-type-value';
+    return { context: 'component-type-value', currentCell };
   }
 
   if (/protocol\s*:\s*$/.test(textBeforeCursor)) {
-    return 'protocol-value';
+    return { context: 'protocol-value', currentCell };
   }
 
   if (/exposes\s*:\s*\[?\s*$/.test(textBeforeCursor) || /provides\s*:\s*\[?\s*$/.test(textBeforeCursor)) {
-    return 'endpoint-type-value';
+    return { context: 'endpoint-type-value', currentCell };
   }
 
   if (/auth\s*:\s*$/.test(textBeforeCursor)) {
-    return 'auth-value';
+    return { context: 'auth-value', currentCell };
   }
 
   // Check if we're at the start of a flow statement (after ->)
   if (/->[\s]*$/.test(textBeforeCursor)) {
-    return 'flow-reference';
+    return { context: 'flow-reference', currentCell };
   }
 
   // Check block context
   if (isInsideBlock(textBefore, 'gateway')) {
-    return 'gateway-body';
+    return { context: 'gateway-body', currentCell };
   }
   if (isInsideBlock(textBefore, 'flow')) {
-    return 'flow-body';
+    return { context: 'flow-body', currentCell };
   }
   if (isInsideBlock(textBefore, 'component') || isInsideBlock(textBefore, 'database') || isInsideBlock(textBefore, 'function')) {
-    return 'component-body';
+    return { context: 'component-body', currentCell };
   }
+
+  // Inside a cell - return cell-body (which includes both keywords AND flow completions)
   if (isInsideBlock(textBefore, 'cell')) {
-    return 'cell-body';
+    return { context: 'cell-body', currentCell };
+  }
+
+  // Inside workspace but not in a cell - always use workspace-body
+  // which provides both top-level keywords (cell, external, etc.) AND flow completions
+  if (isInsideBlock(textBefore, 'workspace')) {
+    return { context: 'workspace-body', currentCell: undefined };
   }
 
   // Top level
   const depth = countBraceDepth(textBefore);
   if (depth === 0) {
-    return 'top-level';
+    return { context: 'top-level', currentCell: undefined };
   }
 
-  return 'unknown';
+  return { context: 'unknown', currentCell };
+}
+
+/**
+ * Check if cursor is at a position where a flow source identifier would start
+ */
+function isAtFlowSourcePosition(textBeforeCursor: string): boolean {
+  // At start of line (only whitespace before cursor on this line)
+  const trimmed = textBeforeCursor.trim();
+  if (trimmed === '') {
+    return true;
+  }
+  // Or cursor is right after typing some identifier characters (partial completion)
+  if (/^[a-zA-Z_][a-zA-Z0-9_-]*$/.test(trimmed)) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Extract the current cell name from text before cursor
+ */
+function getCurrentCellName(textBefore: string): string | undefined {
+  // Find the last cell declaration that we're inside
+  const cellMatches = [...textBefore.matchAll(/\bcell\s+(?:"([^"]+)"|([a-zA-Z_][a-zA-Z0-9_-]*))/g)];
+
+  for (let i = cellMatches.length - 1; i >= 0; i--) {
+    const match = cellMatches[i];
+    if (!match || match.index === undefined) continue;
+
+    const cellName = match[1] || match[2]; // quoted or unquoted name
+    const afterCell = textBefore.slice(match.index);
+    const openBraces = (afterCell.match(/\{/g) || []).length;
+    const closeBraces = (afterCell.match(/\}/g) || []).length;
+
+    if (openBraces > closeBraces) {
+      return cellName;
+    }
+  }
+
+  return undefined;
 }
 
 /**
@@ -316,9 +381,11 @@ function getComponentBodyCompletions(): CompletionItem[] {
 }
 
 /**
- * Flow completions from symbol table
+ * Scoped flow completions from symbol table
+ * - Inside a cell: local components without prefix, external components with CellName.prefix
+ * - Outside a cell: all components with CellName.prefix
  */
-function getFlowCompletions(state: DocumentState): CompletionItem[] {
+function getScopedFlowCompletions(state: DocumentState, currentCell: string | undefined): CompletionItem[] {
   const completions: CompletionItem[] = [];
 
   // Add cell references
@@ -330,14 +397,46 @@ function getFlowCompletions(state: DocumentState): CompletionItem[] {
     });
   }
 
-  // Add component references
+  // Add component references with scoping
   for (const symbol of state.symbolTable.getSymbolsByKind('component')) {
-    const label = symbol.scope ? `${symbol.scope}.${symbol.name}` : symbol.name;
-    completions.push({
-      label,
-      kind: CompletionItemKind.Function,
-      detail: `Component (${symbol.typeInfo ?? 'microservice'})`,
-    });
+    const isLocalComponent = currentCell && symbol.scope === currentCell;
+
+    if (isLocalComponent) {
+      // Local component: suggest without prefix
+      completions.push({
+        label: symbol.name,
+        kind: CompletionItemKind.Function,
+        detail: `Component (${symbol.typeInfo ?? 'microservice'})`,
+      });
+    } else {
+      // External component: suggest with full path
+      const label = symbol.scope ? `${symbol.scope}.${symbol.name}` : symbol.name;
+      completions.push({
+        label,
+        kind: CompletionItemKind.Function,
+        detail: `Component (${symbol.typeInfo ?? 'microservice'})`,
+      });
+    }
+  }
+
+  // Add gateway references with scoping
+  for (const symbol of state.symbolTable.getSymbolsByKind('gateway')) {
+    const isLocalGateway = currentCell && symbol.scope === currentCell;
+
+    if (isLocalGateway) {
+      completions.push({
+        label: symbol.name,
+        kind: CompletionItemKind.Module,
+        detail: 'Gateway',
+      });
+    } else {
+      const label = symbol.scope ? `${symbol.scope}.${symbol.name}` : symbol.name;
+      completions.push({
+        label,
+        kind: CompletionItemKind.Module,
+        detail: 'Gateway',
+      });
+    }
   }
 
   // Add user references
@@ -362,10 +461,10 @@ function getFlowCompletions(state: DocumentState): CompletionItem[] {
 }
 
 /**
- * Flow reference completions (after ->)
+ * Flow completions from symbol table (legacy, all with full paths)
  */
-function getFlowReferenceCompletions(state: DocumentState): CompletionItem[] {
-  return getFlowCompletions(state);
+function getFlowCompletions(state: DocumentState): CompletionItem[] {
+  return getScopedFlowCompletions(state, undefined);
 }
 
 /**
